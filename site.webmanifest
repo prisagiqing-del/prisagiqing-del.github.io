@@ -1,0 +1,38 @@
+{
+  "name": "BTIX - Tiket Resmi Event Favorit Anda",
+  "short_name": "BTIX",
+  "description": "Platform pembelian tiket event dengan QR Code dan Barcode realtime.",
+  "lang": "id-ID",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "categories": [
+    "entertainment",
+    "events",
+    "shopping"
+  ],
+  "icons": [
+    {
+      "src": "./favicon.ico",
+      "sizes": "16x16 32x32 48x48 64x64 128x128 256x256",
+      "type": "image/x-icon",
+      "purpose": "any"
+    },
+    {
+      "src": "https://res.cloudinary.com/dygohchwp/image/upload/v1783972161/favicon-192x192_ptxkm0.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://res.cloudinary.com/dygohchwp/image/upload/v1783972331/favicon-512x512_zlwo8m.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
