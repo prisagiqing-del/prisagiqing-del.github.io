@@ -3810,7 +3810,7 @@
                         let statusUi = '';
                         let adminMsgHtml = '';
                         let cardOverlayHtml = '';
-                        if (isTransferred) { statusUi = `<span class="text-gray-400 font-bold text-xs">DITRANSFER</span>`; }
+                        if (isTransferred) { statusUi = `<span class="text-gray-400 font-bold text-xs">TRANSFER</span>`; }
                         else if (ticketEntry.status === 'SUSPENDED') {
                             statusUi = `<span class="text-amber-400 font-bold bg-amber-500/10 px-2 py-1 rounded text-xs border border-amber-500/30">🟠 DITANGGUHKAN</span>`;
                             adminMsgHtml = ticketEntry.suspendedMessage ? `<p class="text-xs text-orange-300 mb-3">${ticketEntry.suspendedMessage}</p>` : '';
@@ -3830,16 +3830,16 @@
                         }
                         const isLegacySplit = ticketEntry.virtualSeatSplit === true;
                         let actionBtnHtml = '';
-                        if (ticketEntry.status !== 'TRANSFERRED') {
-                            if (ticketEntry.status === 'SUSPENDED') {
-                                actionBtnHtml = `<button type="button" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-60" disabled>Ditangguhkan</button>`;
-                            } else if (isLegacySplit) {
-                                actionBtnHtml = `<button type="button" onclick="openLegacySplitTicket('${k}', '${ticketEntry.selectedSeat}')" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">Lihat Tiket</button>`;
-                            } else {
-                                actionBtnHtml = `<button type="button" onclick="viewTicket('${k}')" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">Lihat Tiket</button>`;
-                            }
+                        if (ticketEntry.status === 'TRANSFERRED') {
+                            actionBtnHtml = `<button type="button" class="border border-gray-600 text-gray-400 px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-70" disabled><i class="fa-solid fa-right-left mr-1"></i> TRANSFER</button>`;
+                        } else if (ticketEntry.status === 'SUSPENDED') {
+                            actionBtnHtml = `<button type="button" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-60" disabled>Ditangguhkan</button>`;
+                        } else if (isLegacySplit) {
+                            actionBtnHtml = `<button type="button" onclick="openLegacySplitTicket('${k}', '${ticketEntry.selectedSeat}')" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">Lihat Tiket</button>`;
+                        } else {
+                            actionBtnHtml = `<button type="button" onclick="viewTicket('${k}')" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">Lihat Tiket</button>`;
                         }
-                        let transferredBadgeHtml = isTransferred ? `<div class="bg-gray-600 text-white font-bold px-3 py-1 text-xs rounded-full mb-2 inline-block"><i class="fa-solid fa-check-double mr-1"></i> DITRANSFER</div>` : '';
+                        let transferredBadgeHtml = isTransferred ? `<div class="bg-gray-600 text-white font-bold px-3 py-1 text-xs rounded-full mb-2 inline-block"><i class="fa-solid fa-right-left mr-1"></i> TRANSFER</div>` : '';
                         let transferredToHtml = isTransferred ? `<p class="text-xs text-gray-400 mb-3"><i class="fa-solid fa-arrow-right text-orange-400 mr-1"></i>Telah dikirim ke: <span class="text-gray-300 font-semibold">${ticketEntry.transferredTo || 'unknown'}</span></p>` : '';
                         let cardOpacity = isTransferred ? 'opacity-60' : '';
                         let seatInfo = ticketEntry.selectedTribun ? `<p class="text-xs text-gray-300 mb-2">Tribun: <span class="text-white font-semibold">${ticketEntry.selectedTribun}</span>${ticketEntry.selectedSeat ? ` • Kursi: <span class="text-white font-semibold">${ticketEntry.selectedSeat}</span>` : ''}</p>` : '';
@@ -5241,6 +5241,11 @@
                     window.scanTimeoutId = setTimeout(() => { window.isProcessingScan = false; }, 1500);
                     return;
                 }
+            } else if (tData.status === 'TRANSFERRED') {
+                playScanFeedback('error');
+                resArea.innerHTML = `<div class="bg-gray-500/20 border-2 border-gray-500 text-gray-300 p-6 rounded-xl text-center shadow-[0_0_20px_rgba(107,114,128,0.25)]"><i class="fa-solid fa-right-left text-5xl mb-3"></i><br><b class="text-3xl tracking-wider">TIKET SUDAH DITRANSFER</b><br><div class="mt-4 text-sm text-gray-300 bg-gray-900/50 p-3 rounded text-left"><p>Tiket lama ini sudah tidak berlaku dan tidak dapat digunakan untuk masuk.</p>${tData.transferredTo ? `<p class="mt-2"><b>Ditransfer ke:</b> ${tData.transferredTo}</p>` : ''}</div></div>`;
+                window.scanTimeoutId = setTimeout(() => { window.isProcessingScan = false; }, 1500);
+                return;
             } else if (tData.status === 'SUSPENDED') {
                 playScanFeedback('error');
                 resArea.innerHTML = `<div class="bg-red-500/20 border-2 border-red-500 text-red-500 p-6 rounded-xl text-center shadow-[0_0_20px_rgba(239,68,68,0.2)]"><i class="fa-solid fa-triangle-exclamation text-5xl mb-3"></i><br><b class="text-3xl tracking-wider">DITANGGUHKAN</b><br><div class="mt-4 text-sm text-red-300 bg-red-900/50 p-3 rounded text-left"><p>Tiket Anda sedang ditangguhkan oleh Admin dan untuk sementara tidak dapat digunakan.</p>${tData.suspendedMessage ? `<p class="mt-2"><b>Pesan Admin:</b> ${tData.suspendedMessage}</p>` : ''}</div></div>`;
@@ -5300,6 +5305,13 @@
                 activeTicketRef = db.ref(`tickets/${tcode}`);
                 activeTicketCb = activeTicketRef.on('value', async (snap) => {
                     const tix = snap.val(); if(!tix) return;
+                    if (tix.status === 'TRANSFERRED') {
+                        closeModal('ticket-modal');
+                        if (activeTicketRef && activeTicketCb) activeTicketRef.off('value', activeTicketCb);
+                        activeTicketRef = null;
+                        activeTicketCb = null;
+                        return Swal.fire({ icon:'info', title:'Tiket Sudah Ditransfer', text:'Tiket lama hanya disimpan sebagai riwayat dan tidak dapat dibuka atau digunakan lagi.', background:'#1e293b', color:'#fff' });
+                    }
                     const ticketOwnerId = tix.ownerId || (window.eventDataMap?.[tix.eventId]?.ownerId || 'SUPER_ADMIN');
                     if (window.isVendor && ticketOwnerId !== window.currentUserData?.uid) {
                         safeSetText('t-event-name', 'Akses Ditolak');
@@ -5475,6 +5487,9 @@
 
         async function openTicketModalWithData(ticketData, ticketKey) {
             try {
+                if (ticketData?.status === 'TRANSFERRED') {
+                    return Swal.fire({ icon:'info', title:'Tiket Sudah Ditransfer', text:'Tiket lama hanya disimpan sebagai riwayat dan tidak dapat dibuka atau digunakan lagi.', background:'#1e293b', color:'#fff' });
+                }
                 openModal('ticket-modal');
                 if(activeTicketRef && activeTicketCb) { activeTicketRef.off('value', activeTicketCb); }
                 activeTicketRef = null;
@@ -5820,211 +5835,126 @@
             e.preventDefault();
             const btn = document.getElementById('btn-transfer-ticket');
             const originalText = btn.innerHTML;
-            
+
             try {
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses Transfer...';
 
+                const currentUser = auth.currentUser;
                 const ticketCode = document.getElementById('transfer-ticket-code').value;
                 const recipientEmail = document.getElementById('transfer-email').value.toLowerCase().trim();
 
+                if (!currentUser) {
+                    throw new Error('Silakan login terlebih dahulu.');
+                }
                 if (!ticketCode || !recipientEmail) {
                     return Swal.fire({icon:'error', title:'Data Tidak Lengkap', text:'Harap isi semua data transfer!', background:'#1e293b', color:'#fff'});
                 }
-
-                console.log('[TRANSFER] Starting transfer process for ticket:', ticketCode, 'to:', recipientEmail);
-
-                // Get original ticket data
-                let originalTicket;
-                try {
-                    console.log('[TRANSFER] Step 1: Reading original ticket data...');
-                    const ticketSnap = await db.ref(`tickets/${ticketCode}`).once('value');
-                    originalTicket = ticketSnap.val();
-                    console.log('[TRANSFER] Step 1: Original ticket data retrieved:', originalTicket);
-                } catch (err) {
-                    console.error('[TRANSFER] Step 1 FAILED - Read original ticket error:', err);
-                    throw new Error(`Gagal membaca data tiket: ${err.message}`);
+                if (recipientEmail === (currentUser.email || '').toLowerCase()) {
+                    return Swal.fire({icon:'warning', title:'Penerima Tidak Valid', text:'Tiket tidak dapat ditransfer ke akun Anda sendiri.', background:'#1e293b', color:'#fff'});
                 }
-                
+
+                console.log('[TRANSFER] Starting atomic transfer for ticket:', ticketCode, 'to:', recipientEmail);
+
+                const ticketSnap = await db.ref(`tickets/${ticketCode}`).once('value');
+                const originalTicket = ticketSnap.val();
                 if (!originalTicket) {
-                    console.warn('[TRANSFER] Original ticket not found');
                     return Swal.fire({icon:'error', title:'Tiket Tidak Ditemukan', background:'#1e293b', color:'#fff'});
                 }
-
+                if (originalTicket.uid !== currentUser.uid) {
+                    return Swal.fire({icon:'error', title:'Akses Ditolak', text:'Tiket ini bukan milik akun Anda.', background:'#1e293b', color:'#fff'});
+                }
                 if (originalTicket.status !== 'ACTIVE') {
-                    console.warn('[TRANSFER] Ticket status is not ACTIVE:', originalTicket.status);
                     return Swal.fire({icon:'error', title:'Tiket Tidak Aktif', text:'Hanya tiket ACTIVE yang bisa ditransfer!', background:'#1e293b', color:'#fff'});
                 }
 
-                // Find recipient by email
-                let recipientUid = null;
-                let recipientData = null;
-                try {
-                    console.log('[TRANSFER] Step 2: Searching for recipient by email...');
-                    const usersSnap = await db.ref('users').once('value');
-                    const usersData = usersSnap.val() || {};
-                    console.log('[TRANSFER] Step 2: Users data retrieved, total users:', Object.keys(usersData).length);
-                    
-                    Object.keys(usersData).forEach(uid => {
-                        const user = usersData[uid];
-                        if (user.email && user.email.toLowerCase() === recipientEmail) {
-                            recipientUid = uid;
-                            recipientData = user;
-                        }
-                    });
-                    console.log('[TRANSFER] Step 2: Recipient found:', recipientUid ? 'YES (UID: ' + recipientUid + ')' : 'NO');
-                } catch (err) {
-                    console.error('[TRANSFER] Step 2 FAILED - Find recipient error:', err);
-                    throw new Error(`Gagal mencari penerima: ${err.message}`);
+                const usersSnap = await db.ref('users').orderByChild('email').equalTo(recipientEmail).once('value');
+                const usersData = usersSnap.val() || {};
+                const recipientUid = Object.keys(usersData)[0] || null;
+                const recipientData = recipientUid ? usersData[recipientUid] : null;
+
+                if (!recipientUid || !recipientData) {
+                    return Swal.fire({icon:'error', title:'Email Tidak Terdaftar', text:'Penerima harus sudah memiliki akun BTIX.', background:'#1e293b', color:'#fff'});
+                }
+                if (recipientUid === currentUser.uid) {
+                    return Swal.fire({icon:'warning', title:'Penerima Tidak Valid', text:'Tiket tidak dapat ditransfer ke akun Anda sendiri.', background:'#1e293b', color:'#fff'});
                 }
 
-                if (!recipientUid) {
-                    console.warn('[TRANSFER] Recipient email not registered');
-                    return Swal.fire({icon:'error', title:'Email Tidak Terdaftar', text:'Email penerima tidak ditemukan dalam sistem Btix!', background:'#1e293b', color:'#fff'});
-                }
-
-                // Get recipient user data (if not already retrieved)
-                if (!recipientData) {
-                    try {
-                        console.log('[TRANSFER] Step 2b: Getting detailed recipient data...');
-                        const recipientSnap = await db.ref(`users/${recipientUid}`).once('value');
-                        recipientData = recipientSnap.val() || {nama: 'User'};
-                        console.log('[TRANSFER] Step 2b: Recipient data:', recipientData);
-                    } catch (err) {
-                        console.error('[TRANSFER] Step 2b FAILED - Get recipient data error:', err);
-                        throw new Error(`Gagal membaca data penerima: ${err.message}`);
-                    }
-                }
-
-                // Generate new ticket code
-                let newTicketCode;
-                try {
-                    console.log('[TRANSFER] Step 3: Generating new ticket code...');
-                    newTicketCode = await window.generateNewTicketCode(originalTicket.ownerId, originalTicket.eventId, window.eventDataMap?.[originalTicket.eventId] || {});
-                    console.log('[TRANSFER] Step 3: New ticket code generated:', newTicketCode);
-                } catch (err) {
-                    console.error('[TRANSFER] Step 3 FAILED - Generate code error:', err);
-                    throw new Error(`Gagal menggenerate kode tiket: ${err.message}`);
-                }
-
-                // Check if code already exists (unlikely but safe)
-                try {
-                    console.log('[TRANSFER] Step 4: Validating new ticket code...');
-                    let codeExists = true;
-                    let attempts = 0;
-                    while (codeExists && attempts < 5) {
-                        const codeCheckSnap = await db.ref(`tickets/${newTicketCode}`).once('value');
-                        codeExists = codeCheckSnap.val() !== null;
-                        if (codeExists) {
-                            attempts++;
-                            console.warn('[TRANSFER] Step 4: Code exists, regenerating (attempt ' + attempts + ')');
-                            newTicketCode = await window.generateNewTicketCode(originalTicket.ownerId, originalTicket.eventId, window.eventDataMap?.[originalTicket.eventId] || {});
-                        }
-                    }
-
+                const resolvedOwnerId = originalTicket.ownerId || window.eventDataMap?.[originalTicket.eventId]?.ownerId || 'SUPER_ADMIN';
+                let newTicketCode = await window.generateNewTicketCode(resolvedOwnerId, originalTicket.eventId, window.eventDataMap?.[originalTicket.eventId] || {});
+                let codeExists = true;
+                let attempts = 0;
+                while (codeExists && attempts < 5) {
+                    const codeCheckSnap = await db.ref(`tickets/${newTicketCode}`).once('value');
+                    codeExists = codeCheckSnap.exists();
                     if (codeExists) {
-                        console.error('[TRANSFER] Step 4: Failed to generate unique code after 5 attempts');
-                        return Swal.fire({icon:'error', title:'Gagal Generate Kode', text:'Sistem gagal menggenerate kode tiket baru. Silakan coba lagi!', background:'#1e293b', color:'#fff'});
+                        attempts += 1;
+                        newTicketCode = await window.generateNewTicketCode(resolvedOwnerId, originalTicket.eventId, window.eventDataMap?.[originalTicket.eventId] || {});
                     }
-                    console.log('[TRANSFER] Step 4: Code validation passed');
-                } catch (err) {
-                    console.error('[TRANSFER] Step 4 FAILED - Code validation error:', err);
-                    throw new Error(`Gagal validasi kode: ${err.message}`);
+                }
+                if (codeExists) {
+                    return Swal.fire({icon:'error', title:'Gagal Generate Kode', text:'Sistem gagal membuat kode tiket baru. Silakan coba lagi.', background:'#1e293b', color:'#fff'});
                 }
 
-                // Get current timestamp
                 const timestamp = firebase.database.ServerValue.TIMESTAMP;
-
-                // Update original ticket to TRANSFERRED status
-                try {
-                    console.log('[TRANSFER] Step 5: Updating original ticket status to TRANSFERRED...');
-                    await db.ref(`tickets/${ticketCode}`).update({
-                        status: 'TRANSFERRED',
-                        transferredTo: recipientEmail,
-                        transferredToUid: recipientUid,
-                        transferredAt: timestamp,
-                        transferHistory: `Ditransfer ke: ${recipientData.nama} (${recipientEmail})`
-                    });
-                    console.log('[TRANSFER] Step 5: Original ticket updated successfully');
-                } catch (err) {
-                    console.error('[TRANSFER] Step 5 FAILED - Update original ticket error:', err);
-                    console.error('[TRANSFER] Error code:', err.code, 'Message:', err.message);
-                    throw new Error(`Gagal mengupdate tiket lama: ${err.message}`);
-                }
-
-                // Create new ticket for recipient
-                try {
-                    console.log('[TRANSFER] Step 6: Creating new ticket for recipient...');
-                    const newTicketData = {
-                        code: newTicketCode,
-                        paymentId: originalTicket.paymentId || null,
-                        uid: recipientUid,
-                        userName: recipientData.nama || 'User',
-                        eventId: originalTicket.eventId,
-                        eventName: originalTicket.eventName,
-                        category: originalTicket.category,
-                        status: 'ACTIVE',
-                        ownerId: originalTicket.ownerId,
-                        transferredFrom: {
-                            originalCode: ticketCode,
-                            originalOwner: originalTicket.userName,
-                            transferredAt: timestamp
-                        },
-                        createdAt: timestamp
-                    };
-                    if (originalTicket.selectedTribun) newTicketData.selectedTribun = originalTicket.selectedTribun;
-                    if (originalTicket.selectedSeat) newTicketData.selectedSeat = originalTicket.selectedSeat;
-                    if (originalTicket.raffle_number !== undefined && originalTicket.raffle_number !== null) newTicketData.raffle_number = originalTicket.raffle_number;
-                    if (originalTicket.type) newTicketData.type = originalTicket.type;
-                    if (originalTicket.quota !== undefined && originalTicket.quota !== null) newTicketData.quota = originalTicket.quota;
-                    if (originalTicket.remaining !== undefined && originalTicket.remaining !== null) newTicketData.remaining = originalTicket.remaining;
-                    if (originalTicket.customFormAnswers) newTicketData.customFormAnswers = originalTicket.customFormAnswers;
-                    await db.ref(`tickets/${newTicketCode}`).set(cleanObject(newTicketData));
-                    console.log('[TRANSFER] Step 6: New ticket created successfully:', newTicketCode);
-                } catch (err) {
-                    console.error('[TRANSFER] Step 6 FAILED - Create new ticket error:', err);
-                    console.error('[TRANSFER] Error code:', err.code, 'Message:', err.message);
-                    throw new Error(`Gagal membuat tiket baru: ${err.message}`);
-                }
-
-                // Record transfer history
-                try {
-                    console.log('[TRANSFER] Step 7: Recording transfer history...');
-                    const transferHistoryRef = db.ref('transferHistory').push();
-                    await transferHistoryRef.set({
-                        fromUid: originalTicket.uid,
-                        fromEmail: window.usersMapCache[originalTicket.uid]?.email || 'unknown',
-                        fromUserName: originalTicket.userName,
-                        toUid: recipientUid,
-                        toEmail: recipientEmail,
-                        toUserName: recipientData.nama,
-                        originalTicketCode: ticketCode,
-                        newTicketCode: newTicketCode,
-                        eventId: originalTicket.eventId,
-                        eventName: originalTicket.eventName,
-                        category: originalTicket.category,
+                const newTicketData = {
+                    code: newTicketCode,
+                    paymentId: originalTicket.paymentId || null,
+                    uid: recipientUid,
+                    userName: recipientData.nama || 'User',
+                    eventId: originalTicket.eventId,
+                    eventName: originalTicket.eventName,
+                    category: originalTicket.category,
+                    status: 'ACTIVE',
+                    ownerId: resolvedOwnerId,
+                    transferredFrom: {
+                        originalCode: ticketCode,
+                        originalUid: originalTicket.uid,
+                        originalOwner: originalTicket.userName,
                         transferredAt: timestamp
-                    });
-                    console.log('[TRANSFER] Step 7: Transfer history recorded successfully');
-                } catch (err) {
-                    console.error('[TRANSFER] Step 7 WARNING - Record history error (non-critical):', err);
-                    // Don't throw - this is non-critical
-                }
+                    },
+                    createdAt: timestamp
+                };
+                if (originalTicket.selectedTribun) newTicketData.selectedTribun = originalTicket.selectedTribun;
+                if (originalTicket.selectedSeat) newTicketData.selectedSeat = originalTicket.selectedSeat;
+                if (originalTicket.raffle_number !== undefined && originalTicket.raffle_number !== null) newTicketData.raffle_number = originalTicket.raffle_number;
+                if (originalTicket.type) newTicketData.type = originalTicket.type;
+                if (originalTicket.quota !== undefined && originalTicket.quota !== null) newTicketData.quota = originalTicket.quota;
+                if (originalTicket.remaining !== undefined && originalTicket.remaining !== null) newTicketData.remaining = originalTicket.remaining;
+                if (originalTicket.customFormAnswers) newTicketData.customFormAnswers = originalTicket.customFormAnswers;
 
-                try {
-                    console.log('[TRANSFER] Step 8: Reconcile event sold counts after transfer...');
-                    await window.reconcileEventTicketCounts?.(originalTicket.eventId);
-                    console.log('[TRANSFER] Step 8: Event sold counts reconciled');
-                } catch (err) {
-                    console.warn('[TRANSFER] Step 8 WARNING - Reconcile counts error:', err);
-                }
+                const transferHistoryKey = db.ref('transferHistory').push().key;
+                if (!transferHistoryKey) throw new Error('Gagal membuat ID riwayat transfer.');
 
-                console.log('[TRANSFER] All steps completed successfully!');
+                const updates = {};
+                updates[`tickets/${ticketCode}/status`] = 'TRANSFERRED';
+                updates[`tickets/${ticketCode}/transferredTo`] = recipientEmail;
+                updates[`tickets/${ticketCode}/transferredToUid`] = recipientUid;
+                updates[`tickets/${ticketCode}/transferredToTicketCode`] = newTicketCode;
+                updates[`tickets/${ticketCode}/transferredAt`] = timestamp;
+                updates[`tickets/${ticketCode}/transferHistory`] = `Ditransfer ke: ${recipientData.nama || 'User'} (${recipientEmail})`;
+                updates[`tickets/${newTicketCode}`] = cleanObject(newTicketData);
+                updates[`transferHistory/${transferHistoryKey}`] = cleanObject({
+                    fromUid: originalTicket.uid,
+                    fromEmail: currentUser.email || '',
+                    fromUserName: originalTicket.userName,
+                    toUid: recipientUid,
+                    toEmail: recipientEmail,
+                    toUserName: recipientData.nama || 'User',
+                    originalTicketCode: ticketCode,
+                    newTicketCode: newTicketCode,
+                    eventId: originalTicket.eventId,
+                    eventName: originalTicket.eventName,
+                    category: originalTicket.category,
+                    transferredAt: timestamp
+                });
+
+                await db.ref().update(updates);
 
                 Swal.fire({
                     icon: 'success',
                     title: 'Transfer Berhasil!',
-                    html: `<p class="text-sm mb-2">Tiket berhasil ditransfer ke:</p><p class="font-bold text-green-400">${recipientData.nama}<br>${recipientEmail}</p><p class="text-xs text-gray-400 mt-3">Kode tiket baru: <b class="text-amber-500">${newTicketCode}</b></p>`,
+                    html: `<p class="text-sm mb-2">Tiket aktif sudah dipindahkan ke:</p><p class="font-bold text-green-400">${recipientData.nama || 'User'}<br>${recipientEmail}</p><p class="text-xs text-gray-400 mt-3">Tiket lama tetap tampil sebagai <b>TRANSFER</b> dan tidak dapat digunakan.<br>Kode tiket baru: <b class="text-amber-500">${newTicketCode}</b></p>`,
                     background: '#1e293b',
                     color: '#fff',
                     confirmButtonColor: '#f59e0b'
@@ -6032,14 +5962,12 @@
                     closeModal('transfer-ticket-modal');
                     switchUserTab('tiket');
                 });
-
             } catch (err) {
                 console.error('[TRANSFER] FINAL ERROR:', err);
-                console.error('[TRANSFER] Error Stack:', err.stack);
                 Swal.fire({
                     icon: 'error',
                     title: 'Gagal Transfer Tiket',
-                    html: `<div class="text-left text-xs"><p><b>Error:</b> ${(err.message || 'Terjadi kesalahan saat memproses transfer tiket.')}</p><p class="text-gray-400 mt-2">Buka Console (F12) untuk detail lengkap.</p></div>`,
+                    text: err.message || 'Terjadi kesalahan saat memproses transfer tiket.',
                     background: '#1e293b',
                     color: '#fff'
                 });
@@ -6048,6 +5976,7 @@
                 btn.innerHTML = originalText;
             }
         };
+
 
         async function handleAddScanner(e) {
             e.preventDefault(); 

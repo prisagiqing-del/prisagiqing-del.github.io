@@ -7,7 +7,7 @@
  */
 
 const CACHE_PREFIX = 'btix-';
-const CACHE_NAME = 'btix-manual-v1';
+const CACHE_NAME = 'btix-secure-transfer-v1';
 
 const APP_SHELL = [
   './',
