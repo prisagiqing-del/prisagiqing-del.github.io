@@ -2556,6 +2556,11 @@
                             window.isVendor = normalizedRole === 'vendor';
                             window.isScanner = normalizedRole.includes('scanner');
                             if (window.populatePaymentSettingsInputs) window.populatePaymentSettingsInputs();
+                            if (window.isVendor) {
+                                setTimeout(() => {
+                                    if (window.syncVendorPaymentMethodPublic) window.syncVendorPaymentMethodPublic().catch(() => {});
+                                }, 500);
+                            }
 
                             if(window.cachedSettings) {
                                 renderWAAdminGrid(window.cachedSettings.whatsapp || {});
@@ -2856,6 +2861,152 @@
             }
         };
 
+        window.getDefaultFooterSettings = function() {
+            return {
+                logo: 'https://imagizer.imageshack.com/img922/4232/Xkqq8E.png',
+                description: 'Platform tiket event terpercaya — temukan dan beli tiket konser, festival, olahraga, dan seminar dengan mudah dan aman.',
+                company: 'Dikelola oleh Mr.Bee Project',
+                privacy: `KEBIJAKAN PRIVASI BTIX
+Terakhir diperbarui: 24 Juli 2026
+
+1. Ruang Lingkup
+Kebijakan Privasi ini menjelaskan bagaimana BTIX yang dikelola oleh Mr.Bee Project mengumpulkan, menggunakan, menyimpan, melindungi, dan mengungkapkan data pribadi saat pengguna mengakses platform, membuat akun, membeli tiket, melakukan transfer tiket, atau menggunakan fitur lain.
+
+2. Data yang Diproses
+Data yang dapat diproses meliputi nama, alamat email, nomor telepon, username, identitas akun Firebase, data pesanan dan pembayaran, data tiket dan pemindaian, jawaban formulir event, riwayat transfer tiket, serta data teknis seperti perangkat, browser, alamat halaman, waktu akses, dan pengenal penyimpanan lokal.
+
+3. Tujuan Pemrosesan
+Data digunakan untuk membuat dan mengelola akun, memproses pesanan serta pembayaran, menerbitkan dan memvalidasi tiket, mencegah penyalahgunaan, mendukung layanan pelanggan, menyampaikan informasi event, membuat laporan operasional, menjaga keamanan platform, dan memenuhi kewajiban hukum.
+
+4. Pembagian Data
+Data dapat diberikan secara terbatas kepada penyelenggara event atau Vendor yang terkait dengan transaksi pengguna, penyedia infrastruktur dan layanan teknologi, serta instansi berwenang apabila diwajibkan oleh hukum. Data tidak boleh digunakan oleh pihak terkait di luar tujuan penyelenggaraan layanan dan event.
+
+5. Penyimpanan dan Keamanan
+BTIX menerapkan langkah teknis dan organisasi yang wajar untuk melindungi data. Tidak ada sistem elektronik yang sepenuhnya bebas risiko; pengguna wajib menjaga kerahasiaan password, kode tiket, QR Code, dan akses perangkatnya. Data disimpan selama diperlukan untuk layanan, transaksi, penyelesaian sengketa, audit, dan kewajiban hukum.
+
+6. Hak Pengguna
+Pengguna dapat meminta akses, koreksi, pembaruan, penghapusan, pembatasan, atau penarikan persetujuan atas data pribadi sesuai ketentuan hukum dan sepanjang tidak bertentangan dengan kewajiban penyimpanan transaksi atau kepentingan hukum yang sah. Permintaan dapat disampaikan melalui kanal resmi BTIX yang tercantum pada platform.
+
+7. Cookie dan Penyimpanan Lokal
+Platform dapat menggunakan cookie atau local storage untuk sesi, preferensi tampilan, identitas perangkat, antrean scanner offline, keamanan, dan statistik penggunaan. Penghapusan penyimpanan browser dapat menyebabkan sebagian preferensi atau fungsi offline hilang.
+
+8. Perubahan Kebijakan
+Kebijakan ini dapat diperbarui untuk menyesuaikan layanan dan peraturan. Versi terbaru yang ditampilkan pada platform berlaku sejak tanggal pembaruannya.
+
+9. Kontak
+Pertanyaan atau permintaan terkait data pribadi dapat disampaikan melalui kanal resmi BTIX. Identitas pemohon dapat diverifikasi sebelum permintaan diproses untuk melindungi keamanan akun dan data.`,
+                terms: `SYARAT & KETENTUAN BTIX
+Terakhir diperbarui: 24 Juli 2026
+
+1. Persetujuan
+Dengan mengakses atau menggunakan BTIX, pengguna dianggap telah membaca dan menyetujui Syarat & Ketentuan ini serta kebijakan event yang dipilih.
+
+2. Akun Pengguna
+Pengguna wajib memberikan data yang benar, menjaga keamanan password, dan bertanggung jawab atas aktivitas pada akunnya. Akun tidak boleh digunakan untuk penipuan, akses tanpa izin, manipulasi transaksi, atau tindakan yang merugikan pengguna lain, penyelenggara, Vendor, dan BTIX.
+
+3. Informasi Event dan Tiket
+Jadwal, lokasi, kategori, kuota, harga, tata tertib, dan ketentuan khusus event ditetapkan oleh penyelenggara event. Pengguna wajib memeriksa detail tersebut sebelum melakukan pemesanan. Tiket hanya sah apabila tercatat pada sistem BTIX dan memiliki status yang dapat digunakan.
+
+4. Pembayaran
+Pembayaran dilakukan melalui metode manual yang ditampilkan pada platform. Pesanan belum dianggap selesai sebelum pembayaran diverifikasi dan disetujui oleh Admin atau Vendor yang berwenang. Pengguna wajib mengirim bukti pembayaran yang benar dan sesuai dengan transaksi.
+
+5. Transfer Tiket
+Tiket berstatus ACTIVE dapat ditransfer oleh pemiliknya kepada penerima yang telah memiliki akun BTIX. Setelah transfer berhasil, tiket lama tetap tercatat sebagai riwayat dengan status TRANSFERRED dan tidak dapat digunakan, dibuka sebagai tiket aktif, dipindai, atau ditransfer kembali. Penerima memperoleh tiket baru berstatus ACTIVE. Pengguna bertanggung jawab memastikan email penerima benar sebelum mengonfirmasi transfer.
+
+6. Penggunaan dan Pemindaian Tiket
+QR Code, barcode, dan kode tiket bersifat unik. Pengguna dilarang menggandakan, menjual secara melawan hukum, mengubah, atau membagikan kode tiket kepada pihak yang tidak berhak. Tiket yang telah digunakan, ditangguhkan, dibatalkan, atau ditransfer akan ditolak oleh sistem scanner sesuai statusnya.
+
+7. Pembatalan, Perubahan, dan Pengembalian Dana
+Pembatalan event, perubahan jadwal, perubahan lokasi, dan pengembalian dana mengikuti kebijakan penyelenggara event dan ketentuan hukum yang berlaku. Hak konsumen yang diberikan oleh peraturan perundang-undangan tetap berlaku dan tidak dikesampingkan oleh dokumen ini.
+
+8. Perilaku yang Dilarang
+Pengguna dilarang mengganggu sistem, mencoba melewati keamanan, mengakses data pihak lain, membuat transaksi palsu, memanipulasi pembayaran atau tiket, menggunakan bot secara merugikan, mengunggah materi melanggar hukum, atau menggunakan platform untuk kegiatan terlarang.
+
+9. Penangguhan Akses
+BTIX dapat membatasi atau menangguhkan akun dan tiket apabila terdapat indikasi penipuan, penyalahgunaan, pelanggaran ketentuan, permintaan pihak berwenang, atau kebutuhan perlindungan sistem dan pengguna. Tindakan dilakukan secara proporsional berdasarkan informasi yang tersedia.
+
+10. Ketersediaan Layanan
+BTIX berupaya menjaga layanan tetap tersedia, tetapi tidak menjamin layanan selalu bebas gangguan. Pemeliharaan, kegagalan jaringan, layanan pihak ketiga, keadaan kahar, atau insiden keamanan dapat memengaruhi akses sementara.
+
+11. Kekayaan Intelektual
+Merek, desain, sistem, materi, dan konten BTIX dilindungi sesuai hukum. Konten milik penyelenggara atau pihak ketiga tetap menjadi hak pemiliknya dan hanya boleh digunakan sesuai izin.
+
+12. Perubahan Ketentuan
+Syarat & Ketentuan dapat diperbarui. Penggunaan platform setelah perubahan berlaku dianggap sebagai penerimaan atas versi terbaru, sepanjang pemberitahuan dan penerapannya sesuai hukum.`,
+                legal: `KETENTUAN HUKUM BTIX
+Terakhir diperbarui: 24 Juli 2026
+
+1. Pengelola Platform
+BTIX dikelola oleh Mr.Bee Project sebagai penyedia platform teknologi ticketing. Penyelenggara event atau Vendor bertanggung jawab atas informasi, pelaksanaan, perizinan, keamanan lokasi, jadwal, dan kewajiban operasional event yang mereka kelola.
+
+2. Transaksi Elektronik
+Pendaftaran akun, pemesanan, persetujuan ketentuan, pencatatan pembayaran, penerbitan tiket, transfer tiket, dan pemindaian merupakan bagian dari transaksi serta catatan elektronik. Log sistem dapat digunakan untuk verifikasi operasional, audit, pencegahan penyalahgunaan, dan pembuktian sesuai hukum yang berlaku.
+
+3. Peraturan yang Berlaku
+Penggunaan platform tunduk pada hukum Republik Indonesia, termasuk ketentuan mengenai pelindungan data pribadi, informasi dan transaksi elektronik, penyelenggaraan sistem elektronik, perlindungan konsumen, serta peraturan lain yang relevan dan berlaku dari waktu ke waktu.
+
+4. Tanggung Jawab Penyelenggara Event
+Penyelenggara event atau Vendor wajib memastikan informasi event akurat, memiliki kewenangan dan perizinan yang diperlukan, menyediakan layanan sesuai penawaran, menangani perubahan atau pembatalan, dan memenuhi kewajiban kepada pembeli. BTIX dapat membantu penyampaian informasi dan administrasi, tanpa menghapus tanggung jawab hukum penyelenggara.
+
+5. Tanggung Jawab Pengguna
+Pengguna bertanggung jawab atas kebenaran data, keamanan akun, keputusan pembelian, ketepatan email penerima transfer, dan kepatuhan terhadap tata tertib event. Pengguna tidak boleh menggunakan platform untuk tindakan melawan hukum atau merugikan pihak lain.
+
+6. Batasan Tanggung Jawab
+Sepanjang diizinkan hukum, tanggung jawab setiap pihak dibatasi pada kerugian langsung yang dapat dibuktikan dan timbul dari pelanggaran kewajibannya. Ketentuan ini tidak membatasi hak konsumen atau tanggung jawab yang tidak dapat dikecualikan berdasarkan peraturan perundang-undangan.
+
+7. Keadaan Kahar
+Pihak dapat dibebaskan dari keterlambatan atau kegagalan yang disebabkan keadaan di luar kendali wajar, seperti bencana, gangguan jaringan luas, kebijakan pemerintah, gangguan layanan pihak ketiga, kerusuhan, atau keadaan kahar lain, dengan tetap melakukan upaya wajar untuk mengurangi dampak.
+
+8. Penyelesaian Perselisihan
+Perselisihan diupayakan terlebih dahulu melalui komunikasi dan musyawarah. Apabila tidak tercapai penyelesaian, para pihak dapat menggunakan mekanisme penyelesaian sengketa konsumen atau forum hukum yang berwenang sesuai peraturan perundang-undangan Republik Indonesia.
+
+9. Keterpisahan
+Apabila suatu ketentuan dinyatakan tidak sah atau tidak dapat diterapkan, ketentuan lainnya tetap berlaku sejauh diizinkan hukum.
+
+10. Dokumen yang Berlaku
+Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaksi yang ditampilkan di BTIX merupakan bagian yang saling melengkapi. Apabila terdapat konflik, ketentuan hukum yang bersifat wajib tetap diutamakan.`
+            };
+        };
+
+        window.renderFooterSettings = function(payload = {}, logos = {}) {
+            const defaults = window.getDefaultFooterSettings();
+            const footer = { ...defaults, ...(payload && typeof payload === 'object' ? payload : {}) };
+            const logoUrl = (footer.logo || logos.nav || defaults.logo || '').toString().trim();
+            footer.logo = logoUrl;
+            window.currentFooterSettings = footer;
+
+            const logoEl = document.getElementById('footer-logo');
+            const logoFallback = document.getElementById('footer-brand-fallback');
+            if (logoEl) {
+                logoEl.classList.remove('hidden');
+                logoEl.src = logoUrl || defaults.logo;
+            }
+            if (logoFallback) logoFallback.classList.add('hidden');
+            safeSetText('footer-description', footer.description || defaults.description);
+            safeSetText('footer-company', footer.company || defaults.company);
+            safeSetText('footer-year', String(new Date().getFullYear()));
+
+            safeSetValue('set-footer-logo', payload?.logo || '');
+            safeSetValue('set-footer-description', footer.description || defaults.description);
+            safeSetValue('set-footer-company', footer.company || defaults.company);
+            safeSetValue('set-footer-privacy', footer.privacy || defaults.privacy);
+            safeSetValue('set-footer-terms', footer.terms || defaults.terms);
+            safeSetValue('set-footer-legal', footer.legal || defaults.legal);
+        };
+
+        window.openFooterLegal = function(type) {
+            const footer = window.currentFooterSettings || window.getDefaultFooterSettings();
+            const documents = {
+                privacy: { title: 'Kebijakan Privasi', content: footer.privacy },
+                terms: { title: 'Syarat & Ketentuan', content: footer.terms },
+                legal: { title: 'Ketentuan Hukum', content: footer.legal }
+            };
+            const selected = documents[type] || documents.legal;
+            safeSetText('footer-legal-title', selected.title);
+            safeSetText('footer-legal-content', selected.content || 'Dokumen belum tersedia.');
+            openModal('footer-legal-modal');
+        };
+
         // Make it globally accessible
         window.listenToSettings = function listenToSettings() {
             db.ref('settings').on('value', snap => {
@@ -2867,12 +3018,13 @@
                 safeSetHTML('hero-title', `${c.title || 'Tiket Resmi'} <br><span class="dynamic-text-primary">${c.sub || 'Event Favorit Anda'}</span>`);
                 safeSetHTML('hero-desc', c.desc || 'Temukan event konser dan olahraga terbaik dengan sistem validasi barcode realtime anti tiket palsu.');
                 safeSetHTML('event-section-title', `Event <span class="dynamic-text-primary">${c.evTitle || 'Terbaru'}</span>`);
-                safeSetText('site-footer', c.footer || '@2026 - Created By Mr.Bee Project');
                 
                 safeSetValue('set-web-name', c.name || ''); safeSetValue('set-web-tagline', c.tagline || ''); safeSetValue('set-web-title', (c.title||'') + " | " + (c.sub||'')); safeSetValue('set-web-desc', c.desc || ''); safeSetValue('set-web-ev-title', c.evTitle || ''); safeSetValue('set-hero-bg', c.heroBg || '');
 
                 const l = s.logos || {}; if(l.nav) { const nm = document.getElementById('nav-logo-img'); if(nm) { nm.src = l.nav; nm.classList.remove('hidden'); document.getElementById('nav-web-name').classList.add('hidden'); } safeSetValue('set-logo-nav', l.nav); }
+                window.renderFooterSettings(s.footer || {}, l);
                 window.sysPayment = s.payment || {};
+                window.vendorPaymentMethods = s.vendorPayments || {};
                 // Populate payment inputs depending on current role so values persist after refresh
                 try {
                     if (window.isVendor && window.currentUserData) {
@@ -2930,36 +3082,58 @@
                 
                 window.getPaymentInfoForOwner = function(ownerId = 'SUPER_ADMIN') {
                     const defaultPayment = {
-                        bank: window.sysPayment?.bank || '',
-                        name: window.sysPayment?.name || '',
-                        qris: window.sysPayment?.qris || ''
+                        bank: (window.sysPayment?.bank || '').toString().trim(),
+                        name: (window.sysPayment?.name || '').toString().trim(),
+                        qris: (window.sysPayment?.qris || '').toString().trim()
                     };
                     if (!ownerId || ownerId === 'SUPER_ADMIN') return defaultPayment;
-                    const ownerData = window.usersMapCache && window.usersMapCache[ownerId];
-                    if (!ownerData) return { bank: '', name: '', qris: '' };
+
+                    const publicPayment = window.vendorPaymentMethods?.[ownerId] || {};
+                    const legacyOwnerData = window.usersMapCache?.[ownerId] || {};
                     return {
-                        bank: ownerData.pay_bank || '',
-                        name: ownerData.pay_name || '',
-                        qris: ownerData.pay_qris || ''
+                        bank: (publicPayment.bank || legacyOwnerData.pay_bank || '').toString().trim(),
+                        name: (publicPayment.name || legacyOwnerData.pay_name || '').toString().trim(),
+                        qris: (publicPayment.qris || legacyOwnerData.pay_qris || '').toString().trim()
                     };
                 };
                 window.loadOwnerPaymentInfo = async function(ownerId) {
-                    if (!ownerId || ownerId === 'SUPER_ADMIN') return null;
-                    if (window.usersMapCache && window.usersMapCache[ownerId] && (window.usersMapCache[ownerId].pay_bank || window.usersMapCache[ownerId].pay_name || window.usersMapCache[ownerId].pay_qris)) {
-                        return window.usersMapCache[ownerId];
-                    }
+                    if (!ownerId || ownerId === 'SUPER_ADMIN') return window.sysPayment || null;
+                    const cached = window.vendorPaymentMethods?.[ownerId];
+                    if (cached && (cached.bank || cached.name || cached.qris)) return cached;
                     try {
-                        const snap = await db.ref(`users/${ownerId}`).once('value');
+                        const snap = await db.ref(`settings/vendorPayments/${ownerId}`).once('value');
                         const data = snap.val() || {};
                         if (Object.keys(data).length) {
-                            window.usersMapCache = window.usersMapCache || {};
-                            window.usersMapCache[ownerId] = { ...(window.usersMapCache[ownerId] || {}), ...data };
-                            return window.usersMapCache[ownerId];
+                            window.vendorPaymentMethods = window.vendorPaymentMethods || {};
+                            window.vendorPaymentMethods[ownerId] = data;
+                            return data;
                         }
                     } catch (e) {
-                        console.warn('Failed to load owner payment info', e);
+                        console.warn('Failed to load public vendor payment info', e);
                     }
                     return null;
+                };
+                window.syncVendorPaymentMethodPublic = async function() {
+                    if (!window.isVendor || !window.currentUserData?.uid || !window.db) return false;
+                    const uid = window.currentUserData.uid;
+                    const legacy = {
+                        bank: (window.currentUserData.pay_bank || '').toString().trim(),
+                        name: (window.currentUserData.pay_name || '').toString().trim(),
+                        qris: (window.currentUserData.pay_qris || '').toString().trim()
+                    };
+                    if (!legacy.bank && !legacy.qris) return false;
+                    const current = window.vendorPaymentMethods?.[uid] || {};
+                    if (current.bank === legacy.bank && current.name === legacy.name && current.qris === legacy.qris) return true;
+                    try {
+                        const payload = { ...legacy, updatedAt: firebase.database.ServerValue.TIMESTAMP };
+                        await window.db.ref(`settings/vendorPayments/${uid}`).set(payload);
+                        window.vendorPaymentMethods = window.vendorPaymentMethods || {};
+                        window.vendorPaymentMethods[uid] = { ...legacy, updatedAt: Date.now() };
+                        return true;
+                    } catch (e) {
+                        console.warn('Failed to publish vendor payment info', e);
+                        return false;
+                    }
                 };
                 window.populatePaymentSettingsInputs = function() {
                     try {
@@ -3797,6 +3971,7 @@
                 keys.reverse().forEach(k => {
                     const t = data[k]; const isSponsor = t.type === 'sponsor'; const isTerusan = (t.category || '').toLowerCase().includes('terusan');
                     const isTransferred = t.status === 'TRANSFERRED';
+                    const isTransferPending = t.status === 'TRANSFER_PENDING';
                     const seatValues = (t.selectedSeat || '').toString().split(/\s*,\s*/).filter(Boolean);
                     const shouldRenderLegacySplit = !!t.virtualSeatSplit && seatValues.length > 1;
                     const ticketEntries = shouldRenderLegacySplit ? seatValues.map(seat => ({
@@ -3811,6 +3986,7 @@
                         let adminMsgHtml = '';
                         let cardOverlayHtml = '';
                         if (isTransferred) { statusUi = `<span class="text-gray-400 font-bold text-xs">TRANSFER</span>`; }
+                        else if (isTransferPending) { statusUi = `<span class="text-amber-400 font-bold text-xs">TRANSFER DIPROSES</span>`; }
                         else if (ticketEntry.status === 'SUSPENDED') {
                             statusUi = `<span class="text-amber-400 font-bold bg-amber-500/10 px-2 py-1 rounded text-xs border border-amber-500/30">🟠 DITANGGUHKAN</span>`;
                             adminMsgHtml = ticketEntry.suspendedMessage ? `<p class="text-xs text-orange-300 mb-3">${ticketEntry.suspendedMessage}</p>` : '';
@@ -3832,6 +4008,8 @@
                         let actionBtnHtml = '';
                         if (ticketEntry.status === 'TRANSFERRED') {
                             actionBtnHtml = `<button type="button" class="border border-gray-600 text-gray-400 px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-70" disabled><i class="fa-solid fa-right-left mr-1"></i> TRANSFER</button>`;
+                        } else if (ticketEntry.status === 'TRANSFER_PENDING') {
+                            actionBtnHtml = `<button type="button" class="border border-amber-600 text-amber-400 px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-70" disabled><i class="fa-solid fa-spinner fa-spin mr-1"></i> DIPROSES</button>`;
                         } else if (ticketEntry.status === 'SUSPENDED') {
                             actionBtnHtml = `<button type="button" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-60" disabled>Ditangguhkan</button>`;
                         } else if (isLegacySplit) {
@@ -3841,7 +4019,7 @@
                         }
                         let transferredBadgeHtml = isTransferred ? `<div class="bg-gray-600 text-white font-bold px-3 py-1 text-xs rounded-full mb-2 inline-block"><i class="fa-solid fa-right-left mr-1"></i> TRANSFER</div>` : '';
                         let transferredToHtml = isTransferred ? `<p class="text-xs text-gray-400 mb-3"><i class="fa-solid fa-arrow-right text-orange-400 mr-1"></i>Telah dikirim ke: <span class="text-gray-300 font-semibold">${ticketEntry.transferredTo || 'unknown'}</span></p>` : '';
-                        let cardOpacity = isTransferred ? 'opacity-60' : '';
+                        let cardOpacity = (isTransferred || isTransferPending) ? 'opacity-60' : '';
                         let seatInfo = ticketEntry.selectedTribun ? `<p class="text-xs text-gray-300 mb-2">Tribun: <span class="text-white font-semibold">${ticketEntry.selectedTribun}</span>${ticketEntry.selectedSeat ? ` • Kursi: <span class="text-white font-semibold">${ticketEntry.selectedSeat}</span>` : ''}</p>` : '';
                         const ticketCodeDisplay = ticketEntry.virtualSeatSplit ? (ticketEntry.virtualCode || ticketEntry.code) : ticketEntry.code;
                         const legacyNote = ticketEntry.virtualSeatSplit ? `<p class="text-xs text-emerald-300 mb-2">(Tiket virtual per kursi dari data lama, pemindaian/transfer berlaku pada kode asli ${ticketEntry.virtualParentCode})</p>` : '';
@@ -4341,6 +4519,25 @@
                 if (eventOwnerId !== 'SUPER_ADMIN') {
                     await window.loadOwnerPaymentInfo(eventOwnerId);
                 }
+                const checkoutPayment = window.getPaymentInfoForOwner(eventOwnerId);
+                const theBank = (checkoutPayment.bank || '').trim();
+                const theName = (checkoutPayment.name || '').trim();
+                const theQris = (checkoutPayment.qris || '').trim();
+                if (!theBank && !theQris) {
+                    btn.disabled = false;
+                    btn.innerHTML = "Checkout Pembayaran";
+                    return Swal.fire({
+                        icon: 'warning',
+                        title: 'Metode Pembayaran Belum Diatur',
+                        text: eventOwnerId === 'SUPER_ADMIN'
+                            ? 'Admin utama belum mengisi nomor rekening/e-wallet atau QRIS.'
+                            : 'Vendor penyelenggara belum mengisi nomor rekening/e-wallet atau QRIS. Silakan hubungi penyelenggara.',
+                        background: '#1e293b',
+                        color: '#fff',
+                        confirmButtonColor: '#f59e0b'
+                    });
+                }
+
                 const newPayRef = db.ref('payments').push(); 
                 const payKey = newPayRef.key;
                 
@@ -4352,15 +4549,10 @@
                 if (Object.keys(window.currentCustomFormAnswers || {}).length > 0) { payloadSet.customFormAnswers = window.currentCustomFormAnswers; }
                 await newPayRef.set(payloadSet);
 
-                const checkoutPayment = window.getPaymentInfoForOwner(eventOwnerId);
-                const theBank = checkoutPayment.bank;
-                const theName = checkoutPayment.name;
-                const theQris = checkoutPayment.qris;
-
-                let payHtml = `<div class="text-left text-sm mb-4"><p>Silakan lakukan pembayaran sebesar <b class="text-green-400 text-lg">${formatRp(total)}</b> ke rekening resmi berikut:</p>`;
+                let payHtml = `<div class="text-left text-sm mb-4"><p>Silakan lakukan pembayaran sebesar <b class="text-green-400 text-lg">${formatRp(total)}</b> menggunakan rekening/e-wallet atau QRIS berikut sebelum mengirim bukti pembayaran:</p>`;
                 if (theBank) {
                     const escapedBank = theBank.replace(/'/g, '\\\'').replace(/"/g, '&quot;');
-                    payHtml += `<div class="bg-dark p-4 rounded-xl mt-3 border border-white/10 shadow-inner"><p class="text-xs text-gray-400">Bank / E-Wallet:</p><div class="flex justify-between items-center"><p class="font-bold text-amber-500 text-xl tracking-wide">${escapedBank}</p><button type="button" onclick="navigator.clipboard.writeText('${escapedBank}'); Swal.showValidationMessage('Berhasil di-copy!')" class="text-gray-400 hover:text-white bg-white/5 px-3 py-1 rounded cursor-pointer"><i class="fa-solid fa-copy"></i> Copy</button></div><p class="text-xs text-gray-400 mt-2">Atas Nama:</p><p class="font-bold text-white text-lg">${theName}</p></div>`;
+                    payHtml += `<div class="bg-dark p-4 rounded-xl mt-3 border border-white/10 shadow-inner"><p class="text-xs text-gray-400">Nomor Rekening / E-Wallet:</p><div class="flex justify-between items-center"><p class="font-bold text-amber-500 text-xl tracking-wide">${escapedBank}</p><button type="button" onclick="navigator.clipboard.writeText('${escapedBank}'); Swal.showValidationMessage('Berhasil di-copy!')" class="text-gray-400 hover:text-white bg-white/5 px-3 py-1 rounded cursor-pointer"><i class="fa-solid fa-copy"></i> Copy</button></div><p class="text-xs text-gray-400 mt-2">Atas Nama:</p><p class="font-bold text-white text-lg">${theName || 'Nama pemilik rekening belum dicantumkan'}</p></div>`;
                 }
                 if (theQris) {
                     const escapedQris = theQris.replace(/'/g, '\\\'').replace(/"/g, '&quot;');
@@ -5091,89 +5283,167 @@
             if(!confirm('Approve pembayaran ini?')) return;
             btn.disabled = true; let ogText = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Proses';
             try {
-                const pStatusSnap = await db.ref(`payments/${key}`).once('value'); const pData = pStatusSnap.val() || {};
+                const pStatusSnap = await db.ref(`payments/${key}`).once('value');
+                const pData = pStatusSnap.val() || {};
                 const existingStatus = (pData.status || '').toString().toUpperCase();
-                if (['APPROVED', 'REJECTED'].includes(existingStatus)) { Toast.fire({icon:'info', title:'Pembayaran ini sudah diproses sebelumnya!'}); return; }
+                if (['APPROVED', 'REJECTED'].includes(existingStatus)) {
+                    Toast.fire({icon:'info', title:'Pembayaran ini sudah diproses sebelumnya!'});
+                    return;
+                }
 
                 const ownerId = window.getPaymentOwnerId(pData) || 'SUPER_ADMIN';
                 if (window.isVendor && ownerId !== window.currentUserData?.uid) {
                     btn.disabled = false; btn.innerHTML = ogText;
                     return Swal.fire('Akses Ditolak', 'Pembayaran ini bukan milik vendor Anda.', 'error');
                 }
+
+                const isUpgrade = (pData.type || '').toString().toUpperCase() === 'UPGRADE';
+                const isDeposit = (pData.type || '').toString().toUpperCase() === 'DEPOSIT';
                 window.__ticketCreationLock = true;
-                await db.ref(`payments/${key}`).update({status: 'APPROVED', approvedAt: firebase.database.ServerValue.TIMESTAMP});
-                if (window.globalPaymentsData) {
-                    window.globalPaymentsData[key] = { ...(window.globalPaymentsData[key] || {}), status: 'APPROVED', approvedAt: Date.now() };
-                }
-                window.refreshDashboardAfterDataMutation?.();
-                const isUpgrade = pData.type === 'UPGRADE';
-                const isDeposit = pData.type === 'DEPOSIT';
                 try {
-                    if (isDeposit) {
-                        await tryConvertApprovedDepositPayment(key, pData);
-                    } else if (isUpgrade) {
-                    const ticketCode = pData.ticketCode || pData.ticket_code;
-                    if (!ticketCode) throw new Error('Data tiket upgrade tidak lengkap.');
-                    const ticketSnap = await db.ref(`tickets/${ticketCode}`).once('value');
-                    const ticketData = ticketSnap.val();
-                    if (!ticketData) throw new Error('Tiket upgrade tidak ditemukan.');
-                    if (ticketData.status !== 'ACTIVE') throw new Error('Tiket tidak aktif, tidak dapat di-upgrade.');
-                    const oldCategory = ticketData.category || pData.currentCategory || '';
-                    const newCategory = category;
-                    const ticketUpdate = { category: newCategory, paymentId: key, upgradedAt: firebase.database.ServerValue.TIMESTAMP, upgradedFrom: oldCategory, upgradePaymentId: key };
-                    const originalSelectedTribun = ticketData.selectedTribun;
-                    const originalSelectedSeat = ticketData.selectedSeat;
-                    if (pData.selectedTribun !== undefined && pData.selectedTribun !== null) {
-                        ticketUpdate.selectedTribun = pData.selectedTribun;
-                    } else if (originalSelectedTribun && oldCategory.toLowerCase() !== newCategory.toLowerCase()) {
-                        ticketUpdate.selectedTribun = '';
+                    if (isUpgrade) {
+                        const ticketCode = pData.ticketCode || pData.ticket_code;
+                        if (!ticketCode) throw new Error('Data tiket upgrade tidak lengkap.');
+                        const ticketSnap = await db.ref(`tickets/${ticketCode}`).once('value');
+                        const ticketData = ticketSnap.val();
+                        if (!ticketData) throw new Error('Tiket lama untuk upgrade tidak ditemukan.');
+                        if (ticketData.status !== 'ACTIVE') throw new Error('Tiket lama tidak aktif, tidak dapat di-upgrade.');
+                        if (ticketData.uid !== (pData.uid || uid)) throw new Error('Pemilik tiket upgrade tidak cocok dengan pembayaran.');
+
+                        const oldCategory = ticketData.category || pData.currentCategory || '';
+                        const newCategory = pData.targetCategory || category;
+                        const eventData = window.eventDataMap?.[evId] || {};
+                        let newTicketCode = await window.generateSecureTicketCode(ownerId, evId, eventData);
+                        let codeExists = true;
+                        let attempts = 0;
+                        while (codeExists && attempts < 8) {
+                            const codeSnap = await db.ref(`tickets/${newTicketCode}`).once('value');
+                            codeExists = codeSnap.exists();
+                            if (codeExists) {
+                                attempts += 1;
+                                newTicketCode = await window.generateSecureTicketCode(ownerId, evId, eventData);
+                            }
+                        }
+                        if (codeExists) throw new Error('Gagal membuat kode tiket upgrade yang unik.');
+
+                        let serverOffset = 0;
+                        try {
+                            const offsetSnap = await db.ref('.info/serverTimeOffset').once('value');
+                            serverOffset = Number(offsetSnap.val() || 0);
+                        } catch (e) {}
+                        const upgradedAt = Date.now() + serverOffset;
+                        const originalSelectedTribun = ticketData.selectedTribun || '';
+                        const originalSelectedSeat = ticketData.selectedSeat || '';
+                        const oldPaymentId = ticketData.paymentId || '';
+
+                        const upgradedTicket = {
+                            ...ticketData,
+                            code: newTicketCode,
+                            paymentId: key,
+                            category: newCategory,
+                            status: 'ACTIVE',
+                            upgradedAt,
+                            upgradedFrom: {
+                                originalCode: ticketCode,
+                                originalCategory: oldCategory,
+                                originalPaymentId: oldPaymentId,
+                                upgradedAt
+                            },
+                            upgradePaymentId: key,
+                            createdAt: upgradedAt
+                        };
+                        delete upgradedTicket.transferredTo;
+                        delete upgradedTicket.transferredToUid;
+                        delete upgradedTicket.transferredToTicketCode;
+                        delete upgradedTicket.transferredAt;
+                        delete upgradedTicket.transferHistory;
+                        delete upgradedTicket.transferredFrom;
+                        delete upgradedTicket.scannedAt;
+                        delete upgradedTicket.scannedBy;
+
+                        if (pData.selectedTribun !== undefined && pData.selectedTribun !== null && pData.selectedTribun !== '') {
+                            upgradedTicket.selectedTribun = pData.selectedTribun;
+                        } else if (originalSelectedTribun && oldCategory.toLowerCase() !== newCategory.toLowerCase()) {
+                            delete upgradedTicket.selectedTribun;
+                        }
+                        if (pData.selectedSeat !== undefined && pData.selectedSeat !== null && pData.selectedSeat !== '') {
+                            upgradedTicket.selectedSeat = pData.selectedSeat;
+                        } else if (originalSelectedSeat && oldCategory.toLowerCase() !== newCategory.toLowerCase()) {
+                            delete upgradedTicket.selectedSeat;
+                        }
+
+                        const upgradeUpdates = {};
+                        upgradeUpdates[`payments/${key}/status`] = 'APPROVED';
+                        upgradeUpdates[`payments/${key}/approvedAt`] = upgradedAt;
+                        upgradeUpdates[`payments/${key}/replacedTicketCode`] = ticketCode;
+                        upgradeUpdates[`payments/${key}/upgradedTicketCode`] = newTicketCode;
+                        upgradeUpdates[`tickets/${ticketCode}`] = null;
+                        upgradeUpdates[`tickets/${newTicketCode}`] = cleanObject(upgradedTicket);
+                        if (oldPaymentId && oldPaymentId !== key && (originalSelectedTribun || originalSelectedSeat)) {
+                            if (originalSelectedTribun) upgradeUpdates[`payments/${oldPaymentId}/selectedTribun`] = null;
+                            if (originalSelectedSeat) upgradeUpdates[`payments/${oldPaymentId}/selectedSeat`] = null;
+                            upgradeUpdates[`payments/${oldPaymentId}/seatReleasedByUpgrade`] = true;
+                        }
+
+                        // Pembayaran, penghapusan tiket lama, dan pembuatan tiket upgrade diproses bersamaan.
+                        await db.ref().update(upgradeUpdates);
+                        if (window.globalPaymentsData) {
+                            window.globalPaymentsData[key] = {
+                                ...(window.globalPaymentsData[key] || pData),
+                                status: 'APPROVED',
+                                approvedAt: upgradedAt,
+                                replacedTicketCode: ticketCode,
+                                upgradedTicketCode: newTicketCode
+                            };
+                        }
+                        if (window.globalTicketsData) {
+                            delete window.globalTicketsData[ticketCode];
+                            window.globalTicketsData[newTicketCode] = cleanObject(upgradedTicket);
+                        }
+                        await window.reconcileEventTicketCounts(evId);
+                        window.refreshDashboardAfterDataMutation?.();
+                        Toast.fire({icon:'success', title:'Upgrade disetujui! Tiket lama dihapus dan tiket baru diterbitkan.'});
+                    } else {
+                        await db.ref(`payments/${key}`).update({status: 'APPROVED', approvedAt: firebase.database.ServerValue.TIMESTAMP});
+                        if (window.globalPaymentsData) {
+                            window.globalPaymentsData[key] = { ...(window.globalPaymentsData[key] || {}), status: 'APPROVED', approvedAt: Date.now() };
+                        }
+                        window.refreshDashboardAfterDataMutation?.();
+
+                        if (isDeposit) {
+                            await tryConvertApprovedDepositPayment(key, pData);
+                        } else {
+                            const ensured = await window.ensureTicketsForPayment(key, {
+                                ...pData,
+                                uid,
+                                userName,
+                                eventId: evId,
+                                eventName,
+                                category,
+                                qty,
+                                ownerId,
+                                selectedTribun: pData.selectedTribun,
+                                selectedSeat: pData.selectedSeat,
+                                customFormAnswers: pData.customFormAnswers
+                            });
+                            await window.reconcileEventTicketCounts(evId);
+                            if (ensured.created === 0) {
+                                Toast.fire({ icon: 'success', title: 'Approved! Tiket sudah ada sebelumnya.' });
+                                return;
+                            }
+                        }
+                        Toast.fire({icon:'success', title:'Approved!'});
                     }
-                    if (pData.selectedSeat !== undefined && pData.selectedSeat !== null) {
-                        ticketUpdate.selectedSeat = pData.selectedSeat;
-                    } else if (originalSelectedSeat && oldCategory.toLowerCase() !== newCategory.toLowerCase()) {
-                        // Clear the old seat assignment when upgrading category so the original seat becomes available again.
-                        ticketUpdate.selectedSeat = '';
-                    }
-                    await db.ref(`tickets/${ticketCode}`).update(cleanObject(ticketUpdate));
-                    const oldPaymentId = ticketData.paymentId;
-                    if (oldPaymentId && oldPaymentId !== key && (originalSelectedTribun || originalSelectedSeat)) {
-                        const releaseUpdate = {};
-                        if (originalSelectedTribun) releaseUpdate.selectedTribun = '';
-                        if (originalSelectedSeat) releaseUpdate.selectedSeat = '';
-                        releaseUpdate.seatReleasedByUpgrade = true;
-                        await db.ref(`payments/${oldPaymentId}`).update(releaseUpdate);
-                    }
-                    const oldCatKey = window.getEventCategorySoldKey(oldCategory);
-                    const newCatKey = window.getEventCategorySoldKey(newCategory);
-                    if (oldCatKey) { db.ref(`events/${evId}/tiket/${oldCatKey}`).transaction(c => Math.max(0, (c || 0) - 1)); }
-                    if (newCatKey) { db.ref(`events/${evId}/tiket/${newCatKey}`).transaction(c => (c || 0) + parseInt(qty)); }
-                    await window.reconcileEventTicketCounts(evId);
-                } else {
-                    const ensured = await window.ensureTicketsForPayment(key, {
-                        ...pData,
-                        uid,
-                        userName,
-                        eventId: evId,
-                        eventName,
-                        category,
-                        qty,
-                        ownerId,
-                        selectedTribun: pData.selectedTribun,
-                        selectedSeat: pData.selectedSeat,
-                        customFormAnswers: pData.customFormAnswers
-                    });
-                    await window.reconcileEventTicketCounts(evId);
-                    if (ensured.created === 0) {
-                        Toast.fire({ icon: 'success', title: 'Approved! Tiket sudah ada sebelumnya.' });
-                        return;
-                    }
-                    }
-                    Toast.fire({icon:'success', title:'Approved!'});
                 } finally {
                     window.__ticketCreationLock = false;
                     window.pruneOverGeneratedTicketsForPayments?.();
                 }
-            } catch(e) { btn.disabled = false; btn.innerHTML = ogText; window.__ticketCreationLock = false; Swal.fire('Gagal Approve', e.message, 'error'); }
+            } catch(e) {
+                btn.disabled = false;
+                btn.innerHTML = ogText;
+                window.__ticketCreationLock = false;
+                Swal.fire('Gagal Approve', e.message, 'error');
+            }
         }
         
         async function rejectPayment(key) {
@@ -5241,6 +5511,11 @@
                     window.scanTimeoutId = setTimeout(() => { window.isProcessingScan = false; }, 1500);
                     return;
                 }
+            } else if (tData.status === 'TRANSFER_PENDING') {
+                playScanFeedback('error');
+                resArea.innerHTML = `<div class="bg-amber-500/20 border-2 border-amber-500 text-amber-300 p-6 rounded-xl text-center"><i class="fa-solid fa-spinner fa-spin text-5xl mb-3"></i><br><b class="text-3xl tracking-wider">TRANSFER DIPROSES</b><br><p class="mt-3 text-sm">Tiket sedang dikunci untuk proses transfer dan belum dapat digunakan.</p></div>`;
+                window.scanTimeoutId = setTimeout(() => { window.isProcessingScan = false; }, 1500);
+                return;
             } else if (tData.status === 'TRANSFERRED') {
                 playScanFeedback('error');
                 resArea.innerHTML = `<div class="bg-gray-500/20 border-2 border-gray-500 text-gray-300 p-6 rounded-xl text-center shadow-[0_0_20px_rgba(107,114,128,0.25)]"><i class="fa-solid fa-right-left text-5xl mb-3"></i><br><b class="text-3xl tracking-wider">TIKET SUDAH DITRANSFER</b><br><div class="mt-4 text-sm text-gray-300 bg-gray-900/50 p-3 rounded text-left"><p>Tiket lama ini sudah tidak berlaku dan tidak dapat digunakan untuk masuk.</p>${tData.transferredTo ? `<p class="mt-2"><b>Ditransfer ke:</b> ${tData.transferredTo}</p>` : ''}</div></div>`;
@@ -5305,6 +5580,13 @@
                 activeTicketRef = db.ref(`tickets/${tcode}`);
                 activeTicketCb = activeTicketRef.on('value', async (snap) => {
                     const tix = snap.val(); if(!tix) return;
+                    if (tix.status === 'TRANSFER_PENDING') {
+                        closeModal('ticket-modal');
+                        if (activeTicketRef && activeTicketCb) activeTicketRef.off('value', activeTicketCb);
+                        activeTicketRef = null;
+                        activeTicketCb = null;
+                        return Swal.fire({ icon:'info', title:'Transfer Sedang Diproses', text:'Tiket sedang dikunci sementara dan tidak dapat dibuka.', background:'#1e293b', color:'#fff' });
+                    }
                     if (tix.status === 'TRANSFERRED') {
                         closeModal('ticket-modal');
                         if (activeTicketRef && activeTicketCb) activeTicketRef.off('value', activeTicketCb);
@@ -5835,6 +6117,9 @@
             e.preventDefault();
             const btn = document.getElementById('btn-transfer-ticket');
             const originalText = btn.innerHTML;
+            let lockedTicketCode = '';
+            let lockedNewTicketCode = '';
+            let transferLockActive = false;
 
             try {
                 btn.disabled = true;
@@ -5844,9 +6129,7 @@
                 const ticketCode = document.getElementById('transfer-ticket-code').value;
                 const recipientEmail = document.getElementById('transfer-email').value.toLowerCase().trim();
 
-                if (!currentUser) {
-                    throw new Error('Silakan login terlebih dahulu.');
-                }
+                if (!currentUser) throw new Error('Silakan login terlebih dahulu.');
                 if (!ticketCode || !recipientEmail) {
                     return Swal.fire({icon:'error', title:'Data Tidak Lengkap', text:'Harap isi semua data transfer!', background:'#1e293b', color:'#fff'});
                 }
@@ -5854,9 +6137,10 @@
                     return Swal.fire({icon:'warning', title:'Penerima Tidak Valid', text:'Tiket tidak dapat ditransfer ke akun Anda sendiri.', background:'#1e293b', color:'#fff'});
                 }
 
-                console.log('[TRANSFER] Starting atomic transfer for ticket:', ticketCode, 'to:', recipientEmail);
+                console.log('[TRANSFER] Starting locked transfer for ticket:', ticketCode, 'to:', recipientEmail);
 
-                const ticketSnap = await db.ref(`tickets/${ticketCode}`).once('value');
+                const ticketRef = db.ref(`tickets/${ticketCode}`);
+                const ticketSnap = await ticketRef.once('value');
                 const originalTicket = ticketSnap.val();
                 if (!originalTicket) {
                     return Swal.fire({icon:'error', title:'Tiket Tidak Ditemukan', background:'#1e293b', color:'#fff'});
@@ -5872,7 +6156,6 @@
                 const usersData = usersSnap.val() || {};
                 const recipientUid = Object.keys(usersData)[0] || null;
                 const recipientData = recipientUid ? usersData[recipientUid] : null;
-
                 if (!recipientUid || !recipientData) {
                     return Swal.fire({icon:'error', title:'Email Tidak Terdaftar', text:'Penerima harus sudah memiliki akun BTIX.', background:'#1e293b', color:'#fff'});
                 }
@@ -5896,12 +6179,37 @@
                     return Swal.fire({icon:'error', title:'Gagal Generate Kode', text:'Sistem gagal membuat kode tiket baru. Silakan coba lagi.', background:'#1e293b', color:'#fff'});
                 }
 
-                const timestamp = firebase.database.ServerValue.TIMESTAMP;
+                let serverOffset = 0;
+                try {
+                    const offsetSnap = await db.ref('.info/serverTimeOffset').once('value');
+                    serverOffset = Number(offsetSnap.val() || 0);
+                } catch (e) {}
+                const transferTimestamp = Date.now() + serverOffset;
+                const recipientName = (recipientData.nama || 'User').toString();
+
+                // Tahap 1: kunci tiket lama agar satu kode tiket hanya dapat menghasilkan satu tiket penerima.
+                const lockResult = await ticketRef.transaction(current => {
+                    if (!current || current.uid !== currentUser.uid || current.status !== 'ACTIVE') return;
+                    return {
+                        ...current,
+                        status: 'TRANSFER_PENDING',
+                        transferredTo: recipientEmail,
+                        transferredToUid: recipientUid,
+                        transferredToTicketCode: newTicketCode,
+                        transferredAt: transferTimestamp,
+                        transferHistory: `Ditransfer ke: ${recipientName} (${recipientEmail})`
+                    };
+                });
+                if (!lockResult.committed) throw new Error('Tiket sedang diproses atau statusnya sudah berubah. Silakan muat ulang.');
+                lockedTicketCode = ticketCode;
+                lockedNewTicketCode = newTicketCode;
+                transferLockActive = true;
+
                 const newTicketData = {
                     code: newTicketCode,
                     paymentId: originalTicket.paymentId || null,
                     uid: recipientUid,
-                    userName: recipientData.nama || 'User',
+                    userName: recipientName,
                     eventId: originalTicket.eventId,
                     eventName: originalTicket.eventName,
                     category: originalTicket.category,
@@ -5911,9 +6219,9 @@
                         originalCode: ticketCode,
                         originalUid: originalTicket.uid,
                         originalOwner: originalTicket.userName,
-                        transferredAt: timestamp
+                        transferredAt: transferTimestamp
                     },
-                    createdAt: timestamp
+                    createdAt: transferTimestamp
                 };
                 if (originalTicket.selectedTribun) newTicketData.selectedTribun = originalTicket.selectedTribun;
                 if (originalTicket.selectedSeat) newTicketData.selectedSeat = originalTicket.selectedSeat;
@@ -5926,13 +6234,9 @@
                 const transferHistoryKey = db.ref('transferHistory').push().key;
                 if (!transferHistoryKey) throw new Error('Gagal membuat ID riwayat transfer.');
 
+                // Tahap 2 bersifat atomik: aktifkan tiket penerima dan finalkan tiket lama bersama-sama.
                 const updates = {};
                 updates[`tickets/${ticketCode}/status`] = 'TRANSFERRED';
-                updates[`tickets/${ticketCode}/transferredTo`] = recipientEmail;
-                updates[`tickets/${ticketCode}/transferredToUid`] = recipientUid;
-                updates[`tickets/${ticketCode}/transferredToTicketCode`] = newTicketCode;
-                updates[`tickets/${ticketCode}/transferredAt`] = timestamp;
-                updates[`tickets/${ticketCode}/transferHistory`] = `Ditransfer ke: ${recipientData.nama || 'User'} (${recipientEmail})`;
                 updates[`tickets/${newTicketCode}`] = cleanObject(newTicketData);
                 updates[`transferHistory/${transferHistoryKey}`] = cleanObject({
                     fromUid: originalTicket.uid,
@@ -5940,21 +6244,21 @@
                     fromUserName: originalTicket.userName,
                     toUid: recipientUid,
                     toEmail: recipientEmail,
-                    toUserName: recipientData.nama || 'User',
+                    toUserName: recipientName,
                     originalTicketCode: ticketCode,
                     newTicketCode: newTicketCode,
                     eventId: originalTicket.eventId,
                     eventName: originalTicket.eventName,
                     category: originalTicket.category,
-                    transferredAt: timestamp
+                    transferredAt: transferTimestamp
                 });
-
                 await db.ref().update(updates);
+                transferLockActive = false;
 
                 Swal.fire({
                     icon: 'success',
                     title: 'Transfer Berhasil!',
-                    html: `<p class="text-sm mb-2">Tiket aktif sudah dipindahkan ke:</p><p class="font-bold text-green-400">${recipientData.nama || 'User'}<br>${recipientEmail}</p><p class="text-xs text-gray-400 mt-3">Tiket lama tetap tampil sebagai <b>TRANSFER</b> dan tidak dapat digunakan.<br>Kode tiket baru: <b class="text-amber-500">${newTicketCode}</b></p>`,
+                    html: `<p class="text-sm mb-2">Tiket aktif sudah dipindahkan ke:</p><p class="font-bold text-green-400">${recipientName}<br>${recipientEmail}</p><p class="text-xs text-gray-400 mt-3">Tiket lama tetap tampil sebagai <b>TRANSFER</b> dan tidak dapat digunakan.<br>Kode tiket baru: <b class="text-amber-500">${newTicketCode}</b></p>`,
                     background: '#1e293b',
                     color: '#fff',
                     confirmButtonColor: '#f59e0b'
@@ -5964,6 +6268,23 @@
                 });
             } catch (err) {
                 console.error('[TRANSFER] FINAL ERROR:', err);
+                if (transferLockActive && lockedTicketCode && lockedNewTicketCode) {
+                    try {
+                        const newTicketSnap = await db.ref(`tickets/${lockedNewTicketCode}`).once('value');
+                        if (!newTicketSnap.exists()) {
+                            await db.ref(`tickets/${lockedTicketCode}`).update({
+                                status: 'ACTIVE',
+                                transferredTo: null,
+                                transferredToUid: null,
+                                transferredToTicketCode: null,
+                                transferredAt: null,
+                                transferHistory: null
+                            });
+                        }
+                    } catch (rollbackError) {
+                        console.error('[TRANSFER] ROLLBACK ERROR:', rollbackError);
+                    }
+                }
                 Swal.fire({
                     icon: 'error',
                     title: 'Gagal Transfer Tiket',
@@ -6530,6 +6851,45 @@
                 Toast.fire({icon:'error', title:err.message}); 
             }
         }
+
+        async function handleFooterSettingsForm(e) {
+            e.preventDefault();
+            try {
+                if (!window.isSuperAdmin) throw new Error('Hanya Super Admin yang dapat mengubah footer dan dokumen hukum.');
+                if (!window.db) throw new Error('Database tidak tersedia!');
+
+                const logoEl = document.getElementById('set-footer-logo');
+                const descriptionEl = document.getElementById('set-footer-description');
+                const companyEl = document.getElementById('set-footer-company');
+                const privacyEl = document.getElementById('set-footer-privacy');
+                const termsEl = document.getElementById('set-footer-terms');
+                const legalEl = document.getElementById('set-footer-legal');
+                if (!descriptionEl || !companyEl || !privacyEl || !termsEl || !legalEl) throw new Error('Form footer tidak lengkap!');
+
+                const payload = {
+                    logo: (logoEl?.value || '').trim(),
+                    description: descriptionEl.value.trim(),
+                    company: companyEl.value.trim(),
+                    privacy: privacyEl.value.trim(),
+                    terms: termsEl.value.trim(),
+                    legal: legalEl.value.trim(),
+                    updatedAt: firebase.database.ServerValue.TIMESTAMP,
+                    updatedBy: window.currentUserData?.uid || auth?.currentUser?.uid || ''
+                };
+
+                if (!payload.description || !payload.company || !payload.privacy || !payload.terms || !payload.legal) {
+                    throw new Error('Deskripsi, pengelola, dan seluruh dokumen hukum wajib diisi.');
+                }
+
+                await window.db.ref('settings/footer').set(payload);
+                window.cachedSettings = window.cachedSettings || {};
+                window.cachedSettings.footer = payload;
+                window.renderFooterSettings(payload, window.cachedSettings.logos || {});
+                Toast.fire({ icon: 'success', title: 'Footer & dokumen hukum diperbarui!' });
+            } catch (err) {
+                Toast.fire({ icon: 'error', title: err.message || 'Gagal menyimpan footer.' });
+            }
+        }
         
         async function savePaymentSettings(e) { 
             e.preventDefault(); 
@@ -6541,32 +6901,43 @@
                 if (!window.db) throw new Error('Database tidak tersedia!');
                 
                 if(window.isVendor && window.currentUserData) { 
-                    await window.db.ref(`users/${window.currentUserData.uid}`).update({ 
-                        pay_bank: bankEl.value || '', 
-                        pay_name: nameEl.value || '', 
-                        pay_qris: qrisEl?.value || '' 
-                    }); 
-                    // Update local cache and UI immediately so values persist without needing a full refresh
+                    const vendorUid = window.currentUserData.uid;
+                    const bank = (bankEl.value || '').trim();
+                    const name = (nameEl.value || '').trim();
+                    const qris = (qrisEl?.value || '').trim();
+                    if (!bank && !qris) throw new Error('Isi nomor rekening/e-wallet atau URL QRIS terlebih dahulu.');
+                    const vendorUpdates = {};
+                    vendorUpdates[`users/${vendorUid}/pay_bank`] = bank;
+                    vendorUpdates[`users/${vendorUid}/pay_name`] = name;
+                    vendorUpdates[`users/${vendorUid}/pay_qris`] = qris;
+                    vendorUpdates[`settings/vendorPayments/${vendorUid}`] = {
+                        bank,
+                        name,
+                        qris,
+                        updatedAt: firebase.database.ServerValue.TIMESTAMP
+                    };
+                    await window.db.ref().update(vendorUpdates);
+                    // Update local cache and UI immediately so checkout can read the public payment method.
                     try {
-                        window.currentUserData.pay_bank = bankEl.value || '';
-                        window.currentUserData.pay_name = nameEl.value || '';
-                        window.currentUserData.pay_qris = qrisEl?.value || '';
+                        window.currentUserData.pay_bank = bank;
+                        window.currentUserData.pay_name = name;
+                        window.currentUserData.pay_qris = qris;
                         if (!window.usersMapCache) window.usersMapCache = {};
-                        window.usersMapCache[window.currentUserData.uid] = window.currentUserData;
-                        safeSetValue('set-pay-bank', window.currentUserData.pay_bank || '');
-                        safeSetValue('set-pay-name', window.currentUserData.pay_name || '');
-                        safeSetValue('set-pay-qris', window.currentUserData.pay_qris || '');
+                        window.usersMapCache[vendorUid] = window.currentUserData;
+                        window.vendorPaymentMethods = window.vendorPaymentMethods || {};
+                        window.vendorPaymentMethods[vendorUid] = { bank, name, qris, updatedAt: Date.now() };
+                        safeSetValue('set-pay-bank', bank);
+                        safeSetValue('set-pay-name', name);
+                        safeSetValue('set-pay-qris', qris);
                     } catch (e) { console.warn('Failed to update local vendor payment cache', e); }
                 } else if (window.isSuperAdmin) { 
-                    await window.db.ref('settings/payment').update({ 
-                        bank: bankEl.value || '', 
-                        name: nameEl.value || '', 
-                        qris: qrisEl?.value || '' 
-                    }); 
+                    const bank = (bankEl.value || '').trim();
+                    const name = (nameEl.value || '').trim();
+                    const qris = (qrisEl?.value || '').trim();
+                    if (!bank && !qris) throw new Error('Isi nomor rekening/e-wallet atau URL QRIS terlebih dahulu.');
+                    await window.db.ref('settings/payment').update({ bank, name, qris }); 
                     // Update local sysPayment cache so settings reflect immediately
-                    try { 
-                        window.sysPayment = { bank: bankEl.value || '', name: nameEl.value || '', qris: qrisEl?.value || '' }; 
-                    } catch (e) {}
+                    try { window.sysPayment = { bank, name, qris }; } catch (e) {}
                 } else {
                     throw new Error('Anda tidak memiliki akses untuk mengubah pengaturan pembayaran!');
                 }

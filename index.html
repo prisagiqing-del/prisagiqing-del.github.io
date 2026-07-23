@@ -182,9 +182,41 @@
             </div>
         </section>
         
-        <footer class="py-6 bg-darker border-t border-white/5 text-center text-gray-500 text-sm" id="site-footer">
-            @2026 - Created By Mr.Bee Project
+        <footer class="bg-darker border-t border-white/10" id="site-footer">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                    <div class="lg:col-span-2">
+                        <div class="flex items-center gap-3 mb-4">
+                            <img id="footer-logo" src="https://imagizer.imageshack.com/img922/4232/Xkqq8E.png" alt="Logo BTIX" class="h-10 max-w-[180px] object-contain" onerror="this.classList.add('hidden'); document.getElementById('footer-brand-fallback')?.classList.remove('hidden');">
+                            <span id="footer-brand-fallback" class="hidden text-2xl font-bold text-white"><i class="fa-solid fa-ticket text-amber-500 mr-2"></i>BTIX</span>
+                        </div>
+                        <p id="footer-description" class="text-gray-300 leading-relaxed max-w-3xl">Platform tiket event terpercaya — temukan dan beli tiket konser, festival, olahraga, dan seminar dengan mudah dan aman.</p>
+                        <p id="footer-company" class="text-sm text-gray-500 mt-4">Dikelola oleh Mr.Bee Project</p>
+                    </div>
+                    <div>
+                        <h3 class="text-white font-bold mb-4">Informasi &amp; Hukum</h3>
+                        <div class="flex flex-col items-start gap-3 text-sm">
+                            <button type="button" onclick="window.openFooterLegal('privacy')" class="text-gray-400 hover:text-amber-400 transition-colors cursor-pointer">Kebijakan Privasi</button>
+                            <button type="button" onclick="window.openFooterLegal('terms')" class="text-gray-400 hover:text-amber-400 transition-colors cursor-pointer">Syarat &amp; Ketentuan</button>
+                            <button type="button" onclick="window.openFooterLegal('legal')" class="text-gray-400 hover:text-amber-400 transition-colors cursor-pointer">Ketentuan Hukum</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="border-t border-white/5 mt-8 pt-5 text-center text-xs text-gray-600">
+                    &copy; <span id="footer-year">2026</span> BTIX. Seluruh hak dilindungi.
+                </div>
+            </div>
         </footer>
+
+        <div id="footer-legal-modal" class="fixed inset-0 z-[120] hidden items-start pt-6 md:pt-10 justify-center modal-overlay bg-darker/90 backdrop-blur-sm opacity-0 overflow-y-auto" aria-hidden="true">
+            <div class="w-full max-w-4xl px-4 modal-content mb-10">
+                <div class="glass-card rounded-2xl p-6 md:p-8 relative">
+                    <button type="button" onclick="closeModal('footer-legal-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-red-400 cursor-pointer z-20 p-2" aria-label="Tutup"><i class="fa-solid fa-xmark text-xl"></i></button>
+                    <h2 id="footer-legal-title" class="text-2xl md:text-3xl font-bold text-white pr-12 mb-5">Informasi Hukum BTIX</h2>
+                    <div id="footer-legal-content" class="text-sm md:text-base text-gray-300 leading-relaxed whitespace-pre-wrap max-h-[72vh] overflow-y-auto pr-2"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="page-event-detail" class="page bg-darker pt-24 pb-20 min-h-screen">
@@ -1101,6 +1133,21 @@
                             <div id="web-settings-container" class="bg-dark/50 p-5 rounded-xl border border-white/5 lg:col-span-2 hidden">
                                 <h3 class="font-bold text-white mb-4">Teks & Logo Depan (Khusus Super Admin)</h3>
                                 <form onsubmit="handleWebSettingsForm(event); return false;" class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="text-xs text-gray-400">Nama Website</label><input type="text" id="set-web-name" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div><label class="text-xs text-gray-400">Judul Event (Terbaru, dll)</label><input type="text" id="set-web-ev-title" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2"><label class="text-xs text-gray-400">Tagline Kecil</label><input type="text" id="set-web-tagline" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2"><label class="text-xs text-gray-400">Judul Banner Besar (Pisahkan Sub dengan ' | ')</label><input type="text" id="set-web-title" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2"><label class="text-xs text-gray-400">Deskripsi Utama</label><textarea id="set-web-desc" rows="2" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white format-teks-rapi"></textarea></div><div class="md:col-span-2"><label class="text-xs text-gray-400">URL Logo Navbar (Rekomendasi 300x100 px)</label><input type="url" id="set-logo-nav" class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2 hidden"><label class="text-xs text-gray-400">URL Background Banner Utama (Dinonaktifkan)</label><input type="url" id="set-hero-bg" class="w-full bg-darker border border-gray-600 rounded p-2 text-white" placeholder="Kosongkan untuk warna dasar gelap bawaan sistem"></div><div class="md:col-span-2"><button type="submit" class="glow-button px-6 py-2 rounded font-bold w-full cursor-pointer">Simpan Pengaturan Web</button></div></form>
+
+                                <div class="border-t border-white/10 my-6"></div>
+                                <div class="mb-4">
+                                    <h3 class="font-bold text-white flex items-center gap-2"><i class="fa-solid fa-scale-balanced text-amber-500"></i> Footer &amp; Dokumen Hukum</h3>
+                                    <p class="text-xs text-gray-400 mt-1">Hanya Super Admin yang dapat mengubah isi ini. Vendor tidak memiliki akses edit.</p>
+                                </div>
+                                <form onsubmit="handleFooterSettingsForm(event); return false;" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="md:col-span-2"><label class="text-xs text-gray-400">URL Logo Footer</label><input type="url" id="set-footer-logo" class="w-full bg-darker border border-gray-600 rounded p-2 text-white" placeholder="Kosongkan untuk memakai logo navbar"></div>
+                                    <div class="md:col-span-2"><label class="text-xs text-gray-400">Deskripsi Footer</label><textarea id="set-footer-description" rows="3" maxlength="500" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white format-teks-rapi"></textarea></div>
+                                    <div class="md:col-span-2"><label class="text-xs text-gray-400">Teks Pengelola</label><input type="text" id="set-footer-company" maxlength="250" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div>
+                                    <div class="md:col-span-2"><label class="text-xs text-gray-400">Kebijakan Privasi</label><textarea id="set-footer-privacy" rows="14" maxlength="20000" required class="w-full bg-darker border border-gray-600 rounded p-3 text-white format-teks-rapi font-mono text-xs"></textarea></div>
+                                    <div class="md:col-span-2"><label class="text-xs text-gray-400">Syarat &amp; Ketentuan</label><textarea id="set-footer-terms" rows="14" maxlength="20000" required class="w-full bg-darker border border-gray-600 rounded p-3 text-white format-teks-rapi font-mono text-xs"></textarea></div>
+                                    <div class="md:col-span-2"><label class="text-xs text-gray-400">Ketentuan Hukum</label><textarea id="set-footer-legal" rows="14" maxlength="20000" required class="w-full bg-darker border border-gray-600 rounded p-3 text-white format-teks-rapi font-mono text-xs"></textarea></div>
+                                    <div class="md:col-span-2"><button type="submit" class="glow-button px-6 py-3 rounded font-bold w-full cursor-pointer"><i class="fa-solid fa-floppy-disk mr-2"></i>Simpan Footer &amp; Dokumen Hukum</button></div>
+                                </form>
                             </div>
                     
                             <div class="bg-dark/50 p-5 rounded-xl border border-white/5 lg:col-span-2">
