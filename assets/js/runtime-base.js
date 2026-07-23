@@ -2455,14 +2455,15 @@
         }
 
         const firebaseConfig = { 
-            apiKey: "AIzaSyC9B5fBm4FR9FbJs0oXaLqN8N2e16XzkNA",
-            authDomain: "beetix-tiket-event.firebaseapp.com",
-            databaseURL: "https://beetix-tiket-event-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "beetix-tiket-event",
-            storageBucket: "beetix-tiket-event.firebasestorage.app",
-            messagingSenderId: "29727938147",
-            appId: "1:29727938147:web:57a64477e0ddc7c6ff0a56"
+            apiKey: "AIzaSyBVgwGz3I7Sb3UYfNpnah5nt5skddnidGo",
+            authDomain: "tiketkaka.firebaseapp.com",
+            databaseURL: "https://tiketkaka-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "tiketkaka",
+            storageBucket: "tiketkaka.firebasestorage.app",
+            messagingSenderId: "246931943390",
+            appId: "1:246931943390:web:285e17a4f64c210d3ef74f"
         };
+        window.__btixFirebaseConfig = firebaseConfig;
 
         var auth, db;
         window.db = null;
@@ -6116,18 +6117,24 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         window.handleTransferTicket = async function(e) {
             e.preventDefault();
             const btn = document.getElementById('btn-transfer-ticket');
-            const originalText = btn.innerHTML;
+            const originalText = btn ? btn.innerHTML : 'Transfer Tiket';
+            let transferStage = 'persiapan';
+            let ticketRef = null;
+            let originalTicket = null;
             let lockedTicketCode = '';
             let lockedNewTicketCode = '';
-            let transferLockActive = false;
+            let recipientTicketCreated = false;
+            let originalTicketFinalized = false;
 
             try {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses Transfer...';
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses Transfer...';
+                }
 
                 const currentUser = auth.currentUser;
-                const ticketCode = document.getElementById('transfer-ticket-code').value;
-                const recipientEmail = document.getElementById('transfer-email').value.toLowerCase().trim();
+                const ticketCode = document.getElementById('transfer-ticket-code')?.value || '';
+                const recipientEmail = (document.getElementById('transfer-email')?.value || '').toLowerCase().trim();
 
                 if (!currentUser) throw new Error('Silakan login terlebih dahulu.');
                 if (!ticketCode || !recipientEmail) {
@@ -6137,11 +6144,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     return Swal.fire({icon:'warning', title:'Penerima Tidak Valid', text:'Tiket tidak dapat ditransfer ke akun Anda sendiri.', background:'#1e293b', color:'#fff'});
                 }
 
-                console.log('[TRANSFER] Starting locked transfer for ticket:', ticketCode, 'to:', recipientEmail);
-
-                const ticketRef = db.ref(`tickets/${ticketCode}`);
+                transferStage = 'membaca tiket lama';
+                console.log('[TRANSFER] Stage:', transferStage, ticketCode);
+                ticketRef = db.ref(`tickets/${ticketCode}`);
                 const ticketSnap = await ticketRef.once('value');
-                const originalTicket = ticketSnap.val();
+                originalTicket = ticketSnap.val();
                 if (!originalTicket) {
                     return Swal.fire({icon:'error', title:'Tiket Tidak Ditemukan', background:'#1e293b', color:'#fff'});
                 }
@@ -6152,6 +6159,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     return Swal.fire({icon:'error', title:'Tiket Tidak Aktif', text:'Hanya tiket ACTIVE yang bisa ditransfer!', background:'#1e293b', color:'#fff'});
                 }
 
+                transferStage = 'mencari akun penerima';
+                console.log('[TRANSFER] Stage:', transferStage, recipientEmail);
                 const usersSnap = await db.ref('users').orderByChild('email').equalTo(recipientEmail).once('value');
                 const usersData = usersSnap.val() || {};
                 const recipientUid = Object.keys(usersData)[0] || null;
@@ -6163,6 +6172,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     return Swal.fire({icon:'warning', title:'Penerima Tidak Valid', text:'Tiket tidak dapat ditransfer ke akun Anda sendiri.', background:'#1e293b', color:'#fff'});
                 }
 
+                transferStage = 'membuat kode tiket penerima';
                 const resolvedOwnerId = originalTicket.ownerId || window.eventDataMap?.[originalTicket.eventId]?.ownerId || 'SUPER_ADMIN';
                 let newTicketCode = await window.generateNewTicketCode(resolvedOwnerId, originalTicket.eventId, window.eventDataMap?.[originalTicket.eventId] || {});
                 let codeExists = true;
@@ -6187,7 +6197,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const transferTimestamp = Date.now() + serverOffset;
                 const recipientName = (recipientData.nama || 'User').toString();
 
-                // Tahap 1: kunci tiket lama agar satu kode tiket hanya dapat menghasilkan satu tiket penerima.
+                transferStage = 'mengunci tiket lama';
+                console.log('[TRANSFER] Stage:', transferStage);
                 const lockResult = await ticketRef.transaction(current => {
                     if (!current || current.uid !== currentUser.uid || current.status !== 'ACTIVE') return;
                     return {
@@ -6203,7 +6214,6 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 if (!lockResult.committed) throw new Error('Tiket sedang diproses atau statusnya sudah berubah. Silakan muat ulang.');
                 lockedTicketCode = ticketCode;
                 lockedNewTicketCode = newTicketCode;
-                transferLockActive = true;
 
                 const newTicketData = {
                     code: newTicketCode,
@@ -6231,29 +6241,38 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 if (originalTicket.remaining !== undefined && originalTicket.remaining !== null) newTicketData.remaining = originalTicket.remaining;
                 if (originalTicket.customFormAnswers) newTicketData.customFormAnswers = originalTicket.customFormAnswers;
 
-                const transferHistoryKey = db.ref('transferHistory').push().key;
-                if (!transferHistoryKey) throw new Error('Gagal membuat ID riwayat transfer.');
+                // Tahap terpisah agar Firebase Rules tidak bergantung pada evaluasi sibling multi-location.
+                transferStage = 'membuat tiket aktif penerima';
+                console.log('[TRANSFER] Stage:', transferStage);
+                await db.ref(`tickets/${newTicketCode}`).set(cleanObject(newTicketData));
+                recipientTicketCreated = true;
 
-                // Tahap 2 bersifat atomik: aktifkan tiket penerima dan finalkan tiket lama bersama-sama.
-                const updates = {};
-                updates[`tickets/${ticketCode}/status`] = 'TRANSFERRED';
-                updates[`tickets/${newTicketCode}`] = cleanObject(newTicketData);
-                updates[`transferHistory/${transferHistoryKey}`] = cleanObject({
-                    fromUid: originalTicket.uid,
-                    fromEmail: currentUser.email || '',
-                    fromUserName: originalTicket.userName,
-                    toUid: recipientUid,
-                    toEmail: recipientEmail,
-                    toUserName: recipientName,
-                    originalTicketCode: ticketCode,
-                    newTicketCode: newTicketCode,
-                    eventId: originalTicket.eventId,
-                    eventName: originalTicket.eventName,
-                    category: originalTicket.category,
-                    transferredAt: transferTimestamp
-                });
-                await db.ref().update(updates);
-                transferLockActive = false;
+                transferStage = 'menonaktifkan tiket lama';
+                console.log('[TRANSFER] Stage:', transferStage);
+                await ticketRef.update({ status: 'TRANSFERRED' });
+                originalTicketFinalized = true;
+
+                // Riwayat bersifat tambahan. Transfer tetap sukses jika riwayat gagal disimpan.
+                transferStage = 'menyimpan riwayat transfer';
+                try {
+                    const transferHistoryRef = db.ref('transferHistory').push();
+                    await transferHistoryRef.set(cleanObject({
+                        fromUid: originalTicket.uid,
+                        fromEmail: currentUser.email || '',
+                        fromUserName: originalTicket.userName,
+                        toUid: recipientUid,
+                        toEmail: recipientEmail,
+                        toUserName: recipientName,
+                        originalTicketCode: ticketCode,
+                        newTicketCode: newTicketCode,
+                        eventId: originalTicket.eventId,
+                        eventName: originalTicket.eventName,
+                        category: originalTicket.category,
+                        transferredAt: transferTimestamp
+                    }));
+                } catch (historyError) {
+                    console.warn('[TRANSFER] Riwayat tidak tersimpan, tiket tetap berhasil dipindahkan:', historyError);
+                }
 
                 Swal.fire({
                     icon: 'success',
@@ -6267,12 +6286,24 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     switchUserTab('tiket');
                 });
             } catch (err) {
-                console.error('[TRANSFER] FINAL ERROR:', err);
-                if (transferLockActive && lockedTicketCode && lockedNewTicketCode) {
+                console.error(`[TRANSFER] Gagal pada tahap: ${transferStage}`, err);
+
+                // Bila tiket penerima sudah dibuat tetapi finalisasi gagal, hapus tiket itu terlebih dahulu.
+                if (recipientTicketCreated && !originalTicketFinalized && lockedNewTicketCode) {
                     try {
-                        const newTicketSnap = await db.ref(`tickets/${lockedNewTicketCode}`).once('value');
-                        if (!newTicketSnap.exists()) {
-                            await db.ref(`tickets/${lockedTicketCode}`).update({
+                        await db.ref(`tickets/${lockedNewTicketCode}`).remove();
+                        recipientTicketCreated = false;
+                    } catch (deleteError) {
+                        console.error('[TRANSFER] Gagal menghapus tiket penerima saat rollback:', deleteError);
+                    }
+                }
+
+                // Kembalikan tiket lama ke ACTIVE hanya jika finalisasi belum berhasil dan tiket penerima sudah tidak ada.
+                if (!originalTicketFinalized && lockedTicketCode && ticketRef) {
+                    try {
+                        const recipientTicketSnap = lockedNewTicketCode ? await db.ref(`tickets/${lockedNewTicketCode}`).once('value') : null;
+                        if (!recipientTicketSnap || !recipientTicketSnap.exists()) {
+                            await ticketRef.update({
                                 status: 'ACTIVE',
                                 transferredTo: null,
                                 transferredToUid: null,
@@ -6285,16 +6316,19 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         console.error('[TRANSFER] ROLLBACK ERROR:', rollbackError);
                     }
                 }
+
                 Swal.fire({
                     icon: 'error',
                     title: 'Gagal Transfer Tiket',
-                    text: err.message || 'Terjadi kesalahan saat memproses transfer tiket.',
+                    text: `Tahap ${transferStage}: ${err.message || 'Terjadi kesalahan saat memproses transfer tiket.'}`,
                     background: '#1e293b',
                     color: '#fff'
                 });
             } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalText;
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
             }
         };
 
