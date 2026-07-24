@@ -2320,20 +2320,22 @@
         function openModal(id) {
             const m = document.getElementById(id);
             if (!m) return;
-            document.querySelectorAll('.modal-overlay.show, .modal.show').forEach((modal) => {
+            document.querySelectorAll('.modal-overlay.show, .modal.show, .footer-legal-overlay.show').forEach((modal) => {
                 if (modal.id !== id) {
                     modal.classList.add('opacity-0');
                     modal.classList.remove('show');
                     modal.setAttribute('aria-hidden', 'true');
                 }
             });
-            m.classList.remove('hidden');
-            m.classList.add('flex');
-            void m.offsetWidth;
-            m.classList.remove('opacity-0');
-            m.classList.add('show');
+            m.classList.remove('hidden', 'opacity-0');
+            m.classList.add('flex', 'show');
             m.setAttribute('aria-hidden', 'false');
             document.body.style.overflow = 'hidden';
+            if (id === 'footer-legal-modal') {
+                const content = document.getElementById('footer-legal-content');
+                if (content) content.scrollTop = 0;
+                requestAnimationFrame(() => document.getElementById('footer-legal-close')?.focus({ preventScroll: true }));
+            }
         }
         function closeModal(id) {
             const m = document.getElementById(id);
@@ -2343,13 +2345,15 @@
             m.setAttribute('aria-hidden', 'true');
             setTimeout(() => {
                 m.classList.add('hidden');
-                m.classList.remove('flex');
-                const hasOpenModal = document.querySelector('.modal-overlay.show, .modal.show');
+                m.classList.remove('flex', 'opacity-0');
+                const hasOpenModal = document.querySelector('.modal-overlay.show, .modal.show, .footer-legal-overlay.show');
                 if (!hasOpenModal) {
                     document.body.style.overflow = 'auto';
                 }
-            }, 150);
+            }, 120);
         }
+        window.openModal = openModal;
+        window.closeModal = closeModal;
 
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('nav-login-btn')?.addEventListener('click', () => openModal('login-modal'));
@@ -3005,8 +3009,19 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const selected = documents[type] || documents.legal;
             safeSetText('footer-legal-title', selected.title);
             safeSetText('footer-legal-content', selected.content || 'Dokumen belum tersedia.');
-            openModal('footer-legal-modal');
+            window.openModal('footer-legal-modal');
         };
+
+        document.addEventListener('click', (event) => {
+            if (event.target?.matches?.('[data-footer-legal-backdrop]')) {
+                window.closeModal('footer-legal-modal');
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && document.getElementById('footer-legal-modal')?.classList.contains('show')) {
+                window.closeModal('footer-legal-modal');
+            }
+        });
 
         // Make it globally accessible
         window.listenToSettings = function listenToSettings() {

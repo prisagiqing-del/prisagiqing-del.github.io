@@ -22,6 +22,105 @@
         .modal-overlay { transition: opacity 0.15s ease-in-out; }
         .modal-overlay .modal-content { transition: transform 0.15s ease-in-out, opacity 0.15s ease-in-out; transform: scale(0.95); opacity: 0; }
         .modal-overlay.show .modal-content { transform: scale(1); opacity: 1; }
+
+        /* Footer legal modal is mounted directly under <body> so page animations
+           cannot trap its fixed positioning or stacking context. */
+        #footer-legal-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 9999 !important;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 0.12s ease, visibility 0.12s ease;
+        }
+        #footer-legal-modal.flex { display: flex !important; }
+        #footer-legal-modal [data-footer-legal-backdrop] {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            border: 0;
+            background: rgba(2, 6, 23, 0.92);
+        }
+        #footer-legal-modal.show {
+            opacity: 1 !important;
+            visibility: visible;
+            pointer-events: auto;
+        }
+        #footer-legal-modal .footer-legal-dialog {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 56rem;
+            opacity: 1 !important;
+            transform: none !important;
+            max-height: calc(100dvh - 1.5rem);
+        }
+        #footer-legal-modal .footer-legal-panel {
+            background: #0f172a !important;
+            color: #f8fafc;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 1rem;
+            overflow: hidden;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.65);
+            max-height: calc(100dvh - 1.5rem);
+        }
+        #footer-legal-modal .footer-legal-header {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1.25rem;
+            background: #0f172a;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        #footer-legal-close {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.75rem;
+            height: 2.75rem;
+            padding: 0;
+            border-radius: 9999px;
+            border: 1px solid rgba(254, 202, 202, 0.45);
+            background: #dc2626;
+            color: #ffffff !important;
+            font-size: 1.9rem;
+            font-weight: 700;
+            line-height: 1;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+            cursor: pointer;
+        }
+        #footer-legal-close:hover,
+        #footer-legal-close:focus-visible { background: #ef4444; outline: 3px solid rgba(251, 191, 36, 0.75); outline-offset: 2px; }
+        #footer-legal-modal .footer-legal-content {
+            padding: 1.25rem;
+            color: #e2e8f0;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            overflow-y: auto;
+            max-height: calc(100dvh - 7.5rem);
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+        @media (min-width: 768px) {
+            #footer-legal-modal { padding: 1.25rem; }
+            #footer-legal-modal .footer-legal-header { padding: 1.25rem 1.75rem; }
+            #footer-legal-modal .footer-legal-content { padding: 1.5rem 1.75rem; }
+        }
+        @supports not (height: 100dvh) {
+            #footer-legal-modal .footer-legal-dialog,
+            #footer-legal-modal .footer-legal-panel { max-height: calc(100vh - 1.5rem); }
+            #footer-legal-modal .footer-legal-content { max-height: calc(100vh - 7.5rem); }
+        }
         .modal.fade.show .modal-content { opacity: 1 !important; transform: none !important; }
         .modal.show {
             z-index: 1060 !important;
