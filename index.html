@@ -89,10 +89,8 @@
 </head>
 <body class="antialiased">
 
-    <div id="loading-overlay">
-        <div class="loader mb-4"></div>
-        <h2 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-yellow-400 to-amber-600" id="load-web-name">Tiket Kaka</h2>
-        <p class="text-gray-400 text-sm mt-2">Memuat sistem realtime...</p>
+    <div id="loading-overlay" aria-label="Memuat Tiket Kaka">
+        <img src="https://i.ibb.co.com/6RSLNkcR/tiketkaka.png" alt="Tiket Kaka" width="420" height="150" fetchpriority="high" decoding="sync" style="display:block; width:min(58vw,260px); height:auto; object-fit:contain;">
     </div>
 
     <script src="./assets/js/loading-overlay.js"></script>
@@ -150,11 +148,9 @@
 
         <div id="hero-slider" class="relative flex items-center justify-center mx-4 overflow-hidden pt-4 pb-8 md:pt-6 md:pb-10 mt-0 bg-transparent">
             <div class="relative z-10 text-center px-4 max-w-4xl mx-auto">
-                                <span id="hero-tagline" class="px-3 py-1 rounded-full border border-white/10 bg-white/5 text-gray-300 text-xs md:text-sm font-medium mb-3 md:mb-4 inline-block backdrop-blur-sm">
-                    Sistem Ticketing Resmi, Cepat, Aman dan Realtime
-                </span>
-                <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-3 md:mb-4 leading-tight" id="hero-title">Tiket Resmi <br><span class="dynamic-text-primary">Event Favorit Anda</span></h1>
-                <p id="hero-desc" class="text-sm sm:text-base md:text-lg text-gray-300 mb-6 md:mb-8 max-w-2xl mx-auto format-teks-rapi">Temukan event konser dan olahraga terbaik dengan sistem validasi barcode realtime anti tiket palsu.</p>
+                                <span id="hero-tagline" class="hidden px-3 py-1 rounded-full border border-white/10 bg-white/5 text-gray-300 text-xs md:text-sm font-medium mb-3 md:mb-4 backdrop-blur-sm" aria-hidden="true"></span>
+                <h1 class="hidden text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-3 md:mb-4 leading-tight" id="hero-title" aria-hidden="true"></h1>
+                <p id="hero-desc" class="hidden text-sm sm:text-base md:text-lg text-gray-300 mb-6 md:mb-8 max-w-2xl mx-auto format-teks-rapi" aria-hidden="true"></p>
                 <div class="flex justify-center">
                     <button type="button" id="hero-btn-text" onclick="document.getElementById('events').scrollIntoView({behavior: 'smooth'})" class="glow-button px-6 py-3 md:px-8 md:py-4 rounded-full font-bold text-sm md:text-lg w-full sm:w-auto"><i class="fa-solid fa-ticket-simple mr-2"></i> BELI TIKET</button>
                 </div>
@@ -1133,7 +1129,7 @@
                             
                             <div id="web-settings-container" class="bg-dark/50 p-5 rounded-xl border border-white/5 lg:col-span-2 hidden">
                                 <h3 class="font-bold text-white mb-4">Teks & Logo Depan (Khusus Super Admin)</h3>
-                                <form onsubmit="handleWebSettingsForm(event); return false;" class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="text-xs text-gray-400">Nama Website</label><input type="text" id="set-web-name" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div><label class="text-xs text-gray-400">Judul Event (Terbaru, dll)</label><input type="text" id="set-web-ev-title" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2"><label class="text-xs text-gray-400">Tagline Kecil</label><input type="text" id="set-web-tagline" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2"><label class="text-xs text-gray-400">Judul Banner Besar (Pisahkan Sub dengan ' | ')</label><input type="text" id="set-web-title" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2"><label class="text-xs text-gray-400">Deskripsi Utama</label><textarea id="set-web-desc" rows="2" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white format-teks-rapi"></textarea></div><div class="md:col-span-2"><label class="text-xs text-gray-400">URL Logo Navbar (Rekomendasi 300x100 px)</label><input type="url" id="set-logo-nav" class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2 hidden"><label class="text-xs text-gray-400">URL Background Banner Utama (Dinonaktifkan)</label><input type="url" id="set-hero-bg" class="w-full bg-darker border border-gray-600 rounded p-2 text-white" placeholder="Kosongkan untuk warna dasar gelap bawaan sistem"></div><div class="md:col-span-2"><button type="submit" class="glow-button px-6 py-2 rounded font-bold w-full cursor-pointer">Simpan Pengaturan Web</button></div></form>
+                                <form onsubmit="handleWebSettingsForm(event); return false;" class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="text-xs text-gray-400">Nama Website</label><input type="text" id="set-web-name" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div><label class="text-xs text-gray-400">Judul Event (Terbaru, dll)</label><input type="text" id="set-web-ev-title" required class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2"><label class="text-xs text-gray-400">Tagline Kecil (Opsional)</label><input type="text" id="set-web-tagline" class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2"><label class="text-xs text-gray-400">Judul Banner Besar (Opsional, pisahkan sub dengan ' | ')</label><input type="text" id="set-web-title" class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2"><label class="text-xs text-gray-400">Deskripsi Utama (Opsional)</label><textarea id="set-web-desc" rows="2" class="w-full bg-darker border border-gray-600 rounded p-2 text-white format-teks-rapi"></textarea></div><div class="md:col-span-2"><label class="text-xs text-gray-400">URL Logo Navbar (Rekomendasi 300x100 px)</label><input type="url" id="set-logo-nav" class="w-full bg-darker border border-gray-600 rounded p-2 text-white"></div><div class="md:col-span-2 hidden"><label class="text-xs text-gray-400">URL Background Banner Utama (Dinonaktifkan)</label><input type="url" id="set-hero-bg" class="w-full bg-darker border border-gray-600 rounded p-2 text-white" placeholder="Kosongkan untuk warna dasar gelap bawaan sistem"></div><div class="md:col-span-2"><button type="submit" class="glow-button px-6 py-2 rounded font-bold w-full cursor-pointer">Simpan Pengaturan Web</button></div></form>
 
                                 <div class="border-t border-white/10 my-6"></div>
                                 <div class="mb-4">

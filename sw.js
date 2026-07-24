@@ -7,7 +7,7 @@
  */
 
 const CACHE_PREFIX = 'btix-';
-const CACHE_NAME = 'btix-tiketkaka-v12-brand-name-favicon';
+const CACHE_NAME = 'btix-tiketkaka-v14-loading-logo-only';
 
 const APP_SHELL = [
   './',

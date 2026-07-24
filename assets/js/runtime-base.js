@@ -3071,12 +3071,52 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const brandName = window.normalizeBrandName(c.name);
                 safeSetHTML('nav-web-name', `<i class="fa-solid fa-ticket mr-1"></i> ${brandName}`);
                 document.title = `${brandName} - Tiket Resmi Event Favorit Anda`;
-                safeSetText('hero-tagline', c.tagline || 'Sistem Ticketing Resmi, Cepat, Aman dan Realtime');
-                safeSetHTML('hero-title', `${c.title || 'Tiket Resmi'} <br><span class="dynamic-text-primary">${c.sub || 'Event Favorit Anda'}</span>`);
-                safeSetHTML('hero-desc', c.desc || 'Temukan event konser dan olahraga terbaik dengan sistem validasi barcode realtime anti tiket palsu.');
-                safeSetHTML('event-section-title', `Event <span class="dynamic-text-primary">${c.evTitle || 'Terbaru'}</span>`);
-                
-                safeSetValue('set-web-name', brandName); safeSetValue('set-web-tagline', c.tagline || ''); safeSetValue('set-web-title', (c.title||'') + " | " + (c.sub||'')); safeSetValue('set-web-desc', c.desc || ''); safeSetValue('set-web-ev-title', c.evTitle || ''); safeSetValue('set-hero-bg', c.heroBg || '');
+
+                const legacyHeroText = new Set([
+                    'Sistem Ticketing Resmi, Cepat, Aman dan Realtime',
+                    'Tiket Resmi',
+                    'Event Favorit Anda',
+                    'Temukan event konser dan olahraga terbaik dengan sistem validasi barcode realtime anti tiket palsu.'
+                ]);
+                const cleanHeroText = (value) => {
+                    const text = String(value || '').trim();
+                    return legacyHeroText.has(text) ? '' : text;
+                };
+                const renderOptionalHeroText = (id, value, html = false) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    if (value) {
+                        if (html) el.innerHTML = value; else el.innerText = value;
+                        el.classList.remove('hidden');
+                        if (id === 'hero-tagline') el.classList.add('inline-block');
+                        el.setAttribute('aria-hidden', 'false');
+                    } else {
+                        if (html) el.innerHTML = ''; else el.innerText = '';
+                        el.classList.add('hidden');
+                        if (id === 'hero-tagline') el.classList.remove('inline-block');
+                        el.setAttribute('aria-hidden', 'true');
+                    }
+                };
+
+                const heroTagline = cleanHeroText(c.tagline);
+                const heroTitle = cleanHeroText(c.title);
+                const heroSub = cleanHeroText(c.sub);
+                const heroDesc = cleanHeroText(c.desc);
+                const heroTitleHtml = heroTitle && heroSub
+                    ? `${escapeHtml(heroTitle)} <br><span class="dynamic-text-primary">${escapeHtml(heroSub)}</span>`
+                    : heroTitle
+                        ? escapeHtml(heroTitle)
+                        : heroSub
+                            ? `<span class="dynamic-text-primary">${escapeHtml(heroSub)}</span>`
+                            : '';
+
+                renderOptionalHeroText('hero-tagline', heroTagline);
+                renderOptionalHeroText('hero-title', heroTitleHtml, true);
+                renderOptionalHeroText('hero-desc', heroDesc);
+                safeSetHTML('event-section-title', `Event <span class="dynamic-text-primary">${escapeHtml(c.evTitle || 'Terbaru')}</span>`);
+
+                const heroAdminTitle = heroTitle && heroSub ? `${heroTitle} | ${heroSub}` : (heroTitle || heroSub);
+                safeSetValue('set-web-name', brandName); safeSetValue('set-web-tagline', heroTagline); safeSetValue('set-web-title', heroAdminTitle); safeSetValue('set-web-desc', heroDesc); safeSetValue('set-web-ev-title', c.evTitle || ''); safeSetValue('set-hero-bg', c.heroBg || '');
 
                 const l = s.logos || {};
                 const navLogoUrl = window.normalizeBrandLogoUrl(l.nav);
