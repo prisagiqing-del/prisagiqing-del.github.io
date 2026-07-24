@@ -125,7 +125,7 @@
             // Konversi ke format CSV
             const csv = window.generateCSV(reportData);
             const timestamp = new Date().toLocaleDateString('id-ID').replace(/\//g, '-');
-            const fileName = `Data_Pembeli_Btix_${timestamp}.csv`;
+            const fileName = `Data_Pembeli_Tiket_Kaka_${timestamp}.csv`;
             
             const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');

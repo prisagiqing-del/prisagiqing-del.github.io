@@ -1,5 +1,5 @@
 /*
- * BTIX temporary service worker.
+ * Tiket Kaka service worker.
  *
  * This file intentionally caches only same-origin application shell files.
  * Firebase, WhatsApp, Cloudinary, CDN, and other remote services
@@ -7,7 +7,7 @@
  */
 
 const CACHE_PREFIX = 'btix-';
-const CACHE_NAME = 'btix-tiketkaka-v11-logo-url-sponsor-clean';
+const CACHE_NAME = 'btix-tiketkaka-v12-brand-name-favicon';
 
 const APP_SHELL = [
   './',

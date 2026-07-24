@@ -1,7 +1,7 @@
 {
-  "name": "BTIX - Tiket Resmi Event Favorit Anda",
-  "short_name": "BTIX",
-  "description": "Platform pembelian tiket event dengan QR Code dan Barcode realtime.",
+  "name": "Tiket Kaka - Tiket Resmi Event Favorit Anda",
+  "short_name": "Tiket Kaka",
+  "description": "Platform Tiket Kaka untuk pembelian tiket event dengan QR Code dan Barcode realtime.",
   "lang": "id-ID",
   "dir": "ltr",
   "start_url": "./",
@@ -17,22 +17,16 @@
   ],
   "icons": [
     {
-      "src": "./favicon.ico",
-      "sizes": "16x16 32x32 48x48 64x64 128x128 256x256",
-      "type": "image/x-icon",
-      "purpose": "any"
-    },
-    {
-      "src": "https://i.ibb.co.com/6RSLNkcR/tiketkaka.png",
+      "src": "https://i.ibb.co.com/N24Lxznt/Chat-GPT-Image-Jul-24-2026-10-11-12-AM.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://i.ibb.co.com/6RSLNkcR/tiketkaka.png",
+      "src": "https://i.ibb.co.com/N24Lxznt/Chat-GPT-Image-Jul-24-2026-10-11-12-AM.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ]
 }

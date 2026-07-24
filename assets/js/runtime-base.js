@@ -1080,7 +1080,7 @@
                 { question: 'Berapa lama proses verifikasi pembayaran?', answer: 'Biasanya verifikasi selesai dalam waktu beberapa menit hingga maksimal 1 jam tergantung antrean admin.', category: 'Pembayaran', status: 'published' },
                 { question: 'Bagaimana jika saya salah mengunggah bukti pembayaran?', answer: 'Anda dapat menghubungi admin melalui fitur kontak yang tersedia untuk memperbaiki bukti pembayaran.', category: 'Pembayaran', status: 'published' },
                 { question: 'Apa yang harus dilakukan jika lupa password?', answer: 'Gunakan fitur lupa password pada halaman login atau hubungi admin untuk bantuan pemulihan akun.', category: 'Akun', status: 'published' },
-                { question: 'Apakah BTIX.BET aman digunakan?', answer: 'Ya, BTIX.BET menggunakan sistem autentikasi akun dan proses pembayaran yang aman untuk melindungi pengguna.', category: 'Akun', status: 'published' },
+                { question: 'Apakah Tiket Kaka aman digunakan?', answer: 'Ya, Tiket Kaka menggunakan sistem autentikasi akun dan proses pembayaran yang aman untuk melindungi pengguna.', category: 'Akun', status: 'published' },
                 { question: 'Apa yang harus dilakukan jika QR Code tidak bisa dipindai?', answer: 'Pastikan layar HP tidak terlalu redup dan gunakan pencahayaan yang cukup. Jika masih gagal, hubungi admin.', category: 'Check In', status: 'published' },
                 { question: 'Apakah saya harus mencetak tiket atau cukup menunjukkan QR Code di HP?', answer: 'Anda cukup menunjukkan QR Code yang ada di HP Anda saat check in.', category: 'Check In', status: 'published' },
                 { question: 'Apakah tiket bisa dibatalkan atau direfund?', answer: 'Kebijakan refund tergantung syarat dan ketentuan event yang dipilih. Silakan cek detail event atau hubungi admin.', category: 'Refund', status: 'published' },
@@ -2870,6 +2870,8 @@
         };
 
         window.DEFAULT_BRAND_LOGO_URL = 'https://i.ibb.co.com/6RSLNkcR/tiketkaka.png';
+        window.DEFAULT_BRAND_NAME = 'Tiket Kaka';
+        window.DEFAULT_FAVICON_URL = 'https://i.ibb.co.com/N24Lxznt/Chat-GPT-Image-Jul-24-2026-10-11-12-AM.png';
 
         window.normalizeBrandLogoUrl = function(value) {
             const url = (value || '').toString().trim();
@@ -2879,16 +2881,32 @@
             return url;
         };
 
+        window.normalizeBrandName = function(value) {
+            const name = (value || '').toString().trim();
+            const legacyKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (!name || legacyKey === 'btix' || legacyKey === 'btixbet' || legacyKey === 'beetix') {
+                return window.DEFAULT_BRAND_NAME;
+            }
+            return name;
+        };
+
+        window.normalizeLegacyBrandText = function(value) {
+            return (value || '').toString()
+                .replace(/BTIX\.BET/gi, window.DEFAULT_BRAND_NAME)
+                .replace(/\bBTIX\b/gi, window.DEFAULT_BRAND_NAME)
+                .replace(/\bBtix\b/g, window.DEFAULT_BRAND_NAME);
+        };
+
         window.getDefaultFooterSettings = function() {
             return {
                 logo: 'https://i.ibb.co.com/6RSLNkcR/tiketkaka.png',
                 description: 'Platform tiket event terpercaya — temukan dan beli tiket konser, festival, olahraga, dan seminar dengan mudah dan aman.',
                 company: 'Dikelola oleh Mr.Bee Project',
-                privacy: `KEBIJAKAN PRIVASI BTIX
+                privacy: `KEBIJAKAN PRIVASI Tiket Kaka
 Terakhir diperbarui: 24 Juli 2026
 
 1. Ruang Lingkup
-Kebijakan Privasi ini menjelaskan bagaimana BTIX yang dikelola oleh Mr.Bee Project mengumpulkan, menggunakan, menyimpan, melindungi, dan mengungkapkan data pribadi saat pengguna mengakses platform, membuat akun, membeli tiket, melakukan transfer tiket, atau menggunakan fitur lain.
+Kebijakan Privasi ini menjelaskan bagaimana Tiket Kaka yang dikelola oleh Mr.Bee Project mengumpulkan, menggunakan, menyimpan, melindungi, dan mengungkapkan data pribadi saat pengguna mengakses platform, membuat akun, membeli tiket, melakukan transfer tiket, atau menggunakan fitur lain.
 
 2. Data yang Diproses
 Data yang dapat diproses meliputi nama, alamat email, nomor telepon, username, identitas akun Firebase, data pesanan dan pembayaran, data tiket dan pemindaian, jawaban formulir event, riwayat transfer tiket, serta data teknis seperti perangkat, browser, alamat halaman, waktu akses, dan pengenal penyimpanan lokal.
@@ -2900,10 +2918,10 @@ Data digunakan untuk membuat dan mengelola akun, memproses pesanan serta pembaya
 Data dapat diberikan secara terbatas kepada penyelenggara event atau Vendor yang terkait dengan transaksi pengguna, penyedia infrastruktur dan layanan teknologi, serta instansi berwenang apabila diwajibkan oleh hukum. Data tidak boleh digunakan oleh pihak terkait di luar tujuan penyelenggaraan layanan dan event.
 
 5. Penyimpanan dan Keamanan
-BTIX menerapkan langkah teknis dan organisasi yang wajar untuk melindungi data. Tidak ada sistem elektronik yang sepenuhnya bebas risiko; pengguna wajib menjaga kerahasiaan password, kode tiket, QR Code, dan akses perangkatnya. Data disimpan selama diperlukan untuk layanan, transaksi, penyelesaian sengketa, audit, dan kewajiban hukum.
+Tiket Kaka menerapkan langkah teknis dan organisasi yang wajar untuk melindungi data. Tidak ada sistem elektronik yang sepenuhnya bebas risiko; pengguna wajib menjaga kerahasiaan password, kode tiket, QR Code, dan akses perangkatnya. Data disimpan selama diperlukan untuk layanan, transaksi, penyelesaian sengketa, audit, dan kewajiban hukum.
 
 6. Hak Pengguna
-Pengguna dapat meminta akses, koreksi, pembaruan, penghapusan, pembatasan, atau penarikan persetujuan atas data pribadi sesuai ketentuan hukum dan sepanjang tidak bertentangan dengan kewajiban penyimpanan transaksi atau kepentingan hukum yang sah. Permintaan dapat disampaikan melalui kanal resmi BTIX yang tercantum pada platform.
+Pengguna dapat meminta akses, koreksi, pembaruan, penghapusan, pembatasan, atau penarikan persetujuan atas data pribadi sesuai ketentuan hukum dan sepanjang tidak bertentangan dengan kewajiban penyimpanan transaksi atau kepentingan hukum yang sah. Permintaan dapat disampaikan melalui kanal resmi Tiket Kaka yang tercantum pada platform.
 
 7. Cookie dan Penyimpanan Lokal
 Platform dapat menggunakan cookie atau local storage untuk sesi, preferensi tampilan, identitas perangkat, antrean scanner offline, keamanan, dan statistik penggunaan. Penghapusan penyimpanan browser dapat menyebabkan sebagian preferensi atau fungsi offline hilang.
@@ -2912,24 +2930,24 @@ Platform dapat menggunakan cookie atau local storage untuk sesi, preferensi tamp
 Kebijakan ini dapat diperbarui untuk menyesuaikan layanan dan peraturan. Versi terbaru yang ditampilkan pada platform berlaku sejak tanggal pembaruannya.
 
 9. Kontak
-Pertanyaan atau permintaan terkait data pribadi dapat disampaikan melalui kanal resmi BTIX. Identitas pemohon dapat diverifikasi sebelum permintaan diproses untuk melindungi keamanan akun dan data.`,
-                terms: `SYARAT & KETENTUAN BTIX
+Pertanyaan atau permintaan terkait data pribadi dapat disampaikan melalui kanal resmi Tiket Kaka. Identitas pemohon dapat diverifikasi sebelum permintaan diproses untuk melindungi keamanan akun dan data.`,
+                terms: `SYARAT & KETENTUAN Tiket Kaka
 Terakhir diperbarui: 24 Juli 2026
 
 1. Persetujuan
-Dengan mengakses atau menggunakan BTIX, pengguna dianggap telah membaca dan menyetujui Syarat & Ketentuan ini serta kebijakan event yang dipilih.
+Dengan mengakses atau menggunakan Tiket Kaka, pengguna dianggap telah membaca dan menyetujui Syarat & Ketentuan ini serta kebijakan event yang dipilih.
 
 2. Akun Pengguna
-Pengguna wajib memberikan data yang benar, menjaga keamanan password, dan bertanggung jawab atas aktivitas pada akunnya. Akun tidak boleh digunakan untuk penipuan, akses tanpa izin, manipulasi transaksi, atau tindakan yang merugikan pengguna lain, penyelenggara, Vendor, dan BTIX.
+Pengguna wajib memberikan data yang benar, menjaga keamanan password, dan bertanggung jawab atas aktivitas pada akunnya. Akun tidak boleh digunakan untuk penipuan, akses tanpa izin, manipulasi transaksi, atau tindakan yang merugikan pengguna lain, penyelenggara, Vendor, dan Tiket Kaka.
 
 3. Informasi Event dan Tiket
-Jadwal, lokasi, kategori, kuota, harga, tata tertib, dan ketentuan khusus event ditetapkan oleh penyelenggara event. Pengguna wajib memeriksa detail tersebut sebelum melakukan pemesanan. Tiket hanya sah apabila tercatat pada sistem BTIX dan memiliki status yang dapat digunakan.
+Jadwal, lokasi, kategori, kuota, harga, tata tertib, dan ketentuan khusus event ditetapkan oleh penyelenggara event. Pengguna wajib memeriksa detail tersebut sebelum melakukan pemesanan. Tiket hanya sah apabila tercatat pada sistem Tiket Kaka dan memiliki status yang dapat digunakan.
 
 4. Pembayaran
 Pembayaran dilakukan melalui metode manual yang ditampilkan pada platform. Pesanan belum dianggap selesai sebelum pembayaran diverifikasi dan disetujui oleh Admin atau Vendor yang berwenang. Pengguna wajib mengirim bukti pembayaran yang benar dan sesuai dengan transaksi.
 
 5. Transfer Tiket
-Tiket berstatus ACTIVE dapat ditransfer oleh pemiliknya kepada penerima yang telah memiliki akun BTIX. Setelah transfer berhasil, tiket lama tetap tercatat sebagai riwayat dengan status TRANSFERRED dan tidak dapat digunakan, dibuka sebagai tiket aktif, dipindai, atau ditransfer kembali. Penerima memperoleh tiket baru berstatus ACTIVE. Pengguna bertanggung jawab memastikan email penerima benar sebelum mengonfirmasi transfer.
+Tiket berstatus ACTIVE dapat ditransfer oleh pemiliknya kepada penerima yang telah memiliki akun Tiket Kaka. Setelah transfer berhasil, tiket lama tetap tercatat sebagai riwayat dengan status TRANSFERRED dan tidak dapat digunakan, dibuka sebagai tiket aktif, dipindai, atau ditransfer kembali. Penerima memperoleh tiket baru berstatus ACTIVE. Pengguna bertanggung jawab memastikan email penerima benar sebelum mengonfirmasi transfer.
 
 6. Penggunaan dan Pemindaian Tiket
 QR Code, barcode, dan kode tiket bersifat unik. Pengguna dilarang menggandakan, menjual secara melawan hukum, mengubah, atau membagikan kode tiket kepada pihak yang tidak berhak. Tiket yang telah digunakan, ditangguhkan, dibatalkan, atau ditransfer akan ditolak oleh sistem scanner sesuai statusnya.
@@ -2941,21 +2959,21 @@ Pembatalan event, perubahan jadwal, perubahan lokasi, dan pengembalian dana meng
 Pengguna dilarang mengganggu sistem, mencoba melewati keamanan, mengakses data pihak lain, membuat transaksi palsu, memanipulasi pembayaran atau tiket, menggunakan bot secara merugikan, mengunggah materi melanggar hukum, atau menggunakan platform untuk kegiatan terlarang.
 
 9. Penangguhan Akses
-BTIX dapat membatasi atau menangguhkan akun dan tiket apabila terdapat indikasi penipuan, penyalahgunaan, pelanggaran ketentuan, permintaan pihak berwenang, atau kebutuhan perlindungan sistem dan pengguna. Tindakan dilakukan secara proporsional berdasarkan informasi yang tersedia.
+Tiket Kaka dapat membatasi atau menangguhkan akun dan tiket apabila terdapat indikasi penipuan, penyalahgunaan, pelanggaran ketentuan, permintaan pihak berwenang, atau kebutuhan perlindungan sistem dan pengguna. Tindakan dilakukan secara proporsional berdasarkan informasi yang tersedia.
 
 10. Ketersediaan Layanan
-BTIX berupaya menjaga layanan tetap tersedia, tetapi tidak menjamin layanan selalu bebas gangguan. Pemeliharaan, kegagalan jaringan, layanan pihak ketiga, keadaan kahar, atau insiden keamanan dapat memengaruhi akses sementara.
+Tiket Kaka berupaya menjaga layanan tetap tersedia, tetapi tidak menjamin layanan selalu bebas gangguan. Pemeliharaan, kegagalan jaringan, layanan pihak ketiga, keadaan kahar, atau insiden keamanan dapat memengaruhi akses sementara.
 
 11. Kekayaan Intelektual
-Merek, desain, sistem, materi, dan konten BTIX dilindungi sesuai hukum. Konten milik penyelenggara atau pihak ketiga tetap menjadi hak pemiliknya dan hanya boleh digunakan sesuai izin.
+Merek, desain, sistem, materi, dan konten Tiket Kaka dilindungi sesuai hukum. Konten milik penyelenggara atau pihak ketiga tetap menjadi hak pemiliknya dan hanya boleh digunakan sesuai izin.
 
 12. Perubahan Ketentuan
 Syarat & Ketentuan dapat diperbarui. Penggunaan platform setelah perubahan berlaku dianggap sebagai penerimaan atas versi terbaru, sepanjang pemberitahuan dan penerapannya sesuai hukum.`,
-                legal: `KETENTUAN HUKUM BTIX
+                legal: `KETENTUAN HUKUM Tiket Kaka
 Terakhir diperbarui: 24 Juli 2026
 
 1. Pengelola Platform
-BTIX dikelola oleh Mr.Bee Project sebagai penyedia platform teknologi ticketing. Penyelenggara event atau Vendor bertanggung jawab atas informasi, pelaksanaan, perizinan, keamanan lokasi, jadwal, dan kewajiban operasional event yang mereka kelola.
+Tiket Kaka dikelola oleh Mr.Bee Project sebagai penyedia platform teknologi ticketing. Penyelenggara event atau Vendor bertanggung jawab atas informasi, pelaksanaan, perizinan, keamanan lokasi, jadwal, dan kewajiban operasional event yang mereka kelola.
 
 2. Transaksi Elektronik
 Pendaftaran akun, pemesanan, persetujuan ketentuan, pencatatan pembayaran, penerbitan tiket, transfer tiket, dan pemindaian merupakan bagian dari transaksi serta catatan elektronik. Log sistem dapat digunakan untuk verifikasi operasional, audit, pencegahan penyalahgunaan, dan pembuktian sesuai hukum yang berlaku.
@@ -2964,7 +2982,7 @@ Pendaftaran akun, pemesanan, persetujuan ketentuan, pencatatan pembayaran, pener
 Penggunaan platform tunduk pada hukum Republik Indonesia, termasuk ketentuan mengenai pelindungan data pribadi, informasi dan transaksi elektronik, penyelenggaraan sistem elektronik, perlindungan konsumen, serta peraturan lain yang relevan dan berlaku dari waktu ke waktu.
 
 4. Tanggung Jawab Penyelenggara Event
-Penyelenggara event atau Vendor wajib memastikan informasi event akurat, memiliki kewenangan dan perizinan yang diperlukan, menyediakan layanan sesuai penawaran, menangani perubahan atau pembatalan, dan memenuhi kewajiban kepada pembeli. BTIX dapat membantu penyampaian informasi dan administrasi, tanpa menghapus tanggung jawab hukum penyelenggara.
+Penyelenggara event atau Vendor wajib memastikan informasi event akurat, memiliki kewenangan dan perizinan yang diperlukan, menyediakan layanan sesuai penawaran, menangani perubahan atau pembatalan, dan memenuhi kewajiban kepada pembeli. Tiket Kaka dapat membantu penyampaian informasi dan administrasi, tanpa menghapus tanggung jawab hukum penyelenggara.
 
 5. Tanggung Jawab Pengguna
 Pengguna bertanggung jawab atas kebenaran data, keamanan akun, keputusan pembelian, ketepatan email penerima transfer, dan kepatuhan terhadap tata tertib event. Pengguna tidak boleh menggunakan platform untuk tindakan melawan hukum atau merugikan pihak lain.
@@ -2982,13 +3000,16 @@ Perselisihan diupayakan terlebih dahulu melalui komunikasi dan musyawarah. Apabi
 Apabila suatu ketentuan dinyatakan tidak sah atau tidak dapat diterapkan, ketentuan lainnya tetap berlaku sejauh diizinkan hukum.
 
 10. Dokumen yang Berlaku
-Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaksi yang ditampilkan di BTIX merupakan bagian yang saling melengkapi. Apabila terdapat konflik, ketentuan hukum yang bersifat wajib tetap diutamakan.`
+Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaksi yang ditampilkan di Tiket Kaka merupakan bagian yang saling melengkapi. Apabila terdapat konflik, ketentuan hukum yang bersifat wajib tetap diutamakan.`
             };
         };
 
         window.renderFooterSettings = function(payload = {}, logos = {}) {
             const defaults = window.getDefaultFooterSettings();
             const footer = { ...defaults, ...(payload && typeof payload === 'object' ? payload : {}) };
+            footer.privacy = window.normalizeLegacyBrandText(footer.privacy || defaults.privacy);
+            footer.terms = window.normalizeLegacyBrandText(footer.terms || defaults.terms);
+            footer.legal = window.normalizeLegacyBrandText(footer.legal || defaults.legal);
             const logoUrl = window.normalizeBrandLogoUrl(footer.logo || logos.nav);
             footer.logo = logoUrl;
             window.currentFooterSettings = footer;
@@ -3047,13 +3068,15 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const s = snap.val() || {};
                 const c = s.content || {};
                 
-                safeSetHTML('nav-web-name', `<i class="fa-solid fa-ticket mr-1"></i> ${c.name || 'Btix'}`);
+                const brandName = window.normalizeBrandName(c.name);
+                safeSetHTML('nav-web-name', `<i class="fa-solid fa-ticket mr-1"></i> ${brandName}`);
+                document.title = `${brandName} - Tiket Resmi Event Favorit Anda`;
                 safeSetText('hero-tagline', c.tagline || 'Sistem Ticketing Resmi, Cepat, Aman dan Realtime');
                 safeSetHTML('hero-title', `${c.title || 'Tiket Resmi'} <br><span class="dynamic-text-primary">${c.sub || 'Event Favorit Anda'}</span>`);
                 safeSetHTML('hero-desc', c.desc || 'Temukan event konser dan olahraga terbaik dengan sistem validasi barcode realtime anti tiket palsu.');
                 safeSetHTML('event-section-title', `Event <span class="dynamic-text-primary">${c.evTitle || 'Terbaru'}</span>`);
                 
-                safeSetValue('set-web-name', c.name || ''); safeSetValue('set-web-tagline', c.tagline || ''); safeSetValue('set-web-title', (c.title||'') + " | " + (c.sub||'')); safeSetValue('set-web-desc', c.desc || ''); safeSetValue('set-web-ev-title', c.evTitle || ''); safeSetValue('set-hero-bg', c.heroBg || '');
+                safeSetValue('set-web-name', brandName); safeSetValue('set-web-tagline', c.tagline || ''); safeSetValue('set-web-title', (c.title||'') + " | " + (c.sub||'')); safeSetValue('set-web-desc', c.desc || ''); safeSetValue('set-web-ev-title', c.evTitle || ''); safeSetValue('set-hero-bg', c.heroBg || '');
 
                 const l = s.logos || {};
                 const navLogoUrl = window.normalizeBrandLogoUrl(l.nav);
@@ -4604,7 +4627,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
                 if (theQris) {
                     const escapedQris = theQris.replace(/'/g, '\\\'').replace(/"/g, '&quot;');
-                    payHtml += `<div class="mt-4 text-center"><p class="text-xs text-gray-400 mb-2">Atau Scan QRIS ini:</p><img src="${escapedQris}" class="w-48 mx-auto rounded-xl shadow-lg border border-white/10 mb-2"><a href="${escapedQris}" download="QRIS_Btix" target="_blank" class="text-xs text-blue-400 hover:text-blue-300 font-bold bg-blue-500/10 px-3 py-1 rounded-full"><i class="fa-solid fa-download"></i> Simpan Gambar QRIS</a></div>`;
+                    payHtml += `<div class="mt-4 text-center"><p class="text-xs text-gray-400 mb-2">Atau Scan QRIS ini:</p><img src="${escapedQris}" class="w-48 mx-auto rounded-xl shadow-lg border border-white/10 mb-2"><a href="${escapedQris}" download="QRIS_Tiket_Kaka" target="_blank" class="text-xs text-blue-400 hover:text-blue-300 font-bold bg-blue-500/10 px-3 py-1 rounded-full"><i class="fa-solid fa-download"></i> Simpan Gambar QRIS</a></div>`;
                 }
 
                 const escapedPayKey = payKey.replace(/'/g, '\\\'');
@@ -5080,7 +5103,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
                 if(theQris) { 
                     const escapedQris = theQris.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    payHtml += `<div class="mt-4 text-center"><p class="text-xs text-gray-400 mb-2">Atau Scan QRIS ini:</p><img src="${escapedQris}" class="w-48 mx-auto rounded-xl shadow-lg border border-white/10 mb-2"><a href="${escapedQris}" download="QRIS_Btix" target="_blank" class="text-xs text-blue-400 hover:text-blue-300 font-bold bg-blue-500/10 px-3 py-1 rounded-full"><i class="fa-solid fa-download"></i> Simpan Gambar QRIS</a></div>`; 
+                    payHtml += `<div class="mt-4 text-center"><p class="text-xs text-gray-400 mb-2">Atau Scan QRIS ini:</p><img src="${escapedQris}" class="w-48 mx-auto rounded-xl shadow-lg border border-white/10 mb-2"><a href="${escapedQris}" download="QRIS_Tiket_Kaka" target="_blank" class="text-xs text-blue-400 hover:text-blue-300 font-bold bg-blue-500/10 px-3 py-1 rounded-full"><i class="fa-solid fa-download"></i> Simpan Gambar QRIS</a></div>`; 
                 }
                 payHtml += `</div><p class="text-xs text-red-400 bg-red-500/10 p-3 rounded-lg border border-red-500/20 font-bold mb-4"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Screenshot bukti transfer, lalu klik tombol di bawah ini untuk langsung mengirim bukti via WA ke Admin agar deposit di-approve.</p><button type="button" onclick="window.sendWAProof('${payKey}', '${escapedTitle}', '${escapedCategory}', ${effectiveQty}, ${amount}, '${ownerId}'); Swal.close(); showPage('user-dash');" class="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3 rounded-lg text-sm transition-colors shadow-lg cursor-pointer"><i class="fa-brands fa-whatsapp text-lg mr-2"></i> Kirim Bukti Pembayaran ke WA Admin</button>`;
                 Swal.fire({ title: 'Deposit Dibuat!', html: payHtml, showConfirmButton: false, background:'#1e293b', color:'#fff', allowOutsideClick: false });
@@ -6104,7 +6127,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
                 if (upQris) {
                     const eq = upQris.replace(/'/g, "\\'").replace(/\"/g, '&quot;');
-                    upHtml += `<div class="mt-4 text-center"><p class="text-xs text-gray-400 mb-2">Atau Scan QRIS ini:</p><img src="${eq}" class="w-48 mx-auto rounded-xl shadow-lg border border-white/10 mb-2"><a href="${eq}" download="QRIS_Btix" target="_blank" class="text-xs text-blue-400 hover:text-blue-300 font-bold bg-blue-500/10 px-3 py-1 rounded-full"><i class="fa-solid fa-download"></i> Simpan Gambar QRIS</a></div>`;
+                    upHtml += `<div class="mt-4 text-center"><p class="text-xs text-gray-400 mb-2">Atau Scan QRIS ini:</p><img src="${eq}" class="w-48 mx-auto rounded-xl shadow-lg border border-white/10 mb-2"><a href="${eq}" download="QRIS_Tiket_Kaka" target="_blank" class="text-xs text-blue-400 hover:text-blue-300 font-bold bg-blue-500/10 px-3 py-1 rounded-full"><i class="fa-solid fa-download"></i> Simpan Gambar QRIS</a></div>`;
                 }
                 upHtml += `</div>`;
 
@@ -6213,7 +6236,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const recipientUid = Object.keys(usersData)[0] || null;
                 const recipientData = recipientUid ? usersData[recipientUid] : null;
                 if (!recipientUid || !recipientData) {
-                    return Swal.fire({icon:'error', title:'Email Tidak Terdaftar', text:'Penerima harus sudah memiliki akun BTIX.', background:'#1e293b', color:'#fff'});
+                    return Swal.fire({icon:'error', title:'Email Tidak Terdaftar', text:'Penerima harus sudah memiliki akun Tiket Kaka.', background:'#1e293b', color:'#fff'});
                 }
                 if (recipientUid === currentUser.uid) {
                     return Swal.fire({icon:'warning', title:'Penerima Tidak Valid', text:'Tiket tidak dapat ditransfer ke akun Anda sendiri.', background:'#1e293b', color:'#fff'});
@@ -6918,7 +6941,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 
                 const t = (titleEl.value || '').split(" | "); 
                 await window.db.ref('settings/content').update({ 
-                    name: nameEl.value || '', 
+                    name: window.normalizeBrandName ? window.normalizeBrandName(nameEl.value) : (nameEl.value || 'Tiket Kaka'), 
                     tagline: taglineEl?.value || '', 
                     title: t[0] || '', 
                     sub: t[1] || '', 
@@ -8026,7 +8049,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         window.enableAdminTwoFA = async function(adminUid) {
             try {
                 const secret = window.generateTwoFASecret();
-                const qrCode = `otpauth://totp/Btix%20Admin:${adminUid}?secret=${secret}&issuer=Btix`;
+                const qrCode = `otpauth://totp/Tiket%20Kaka%20Admin:${adminUid}?secret=${secret}&issuer=Tiket%20Kaka`;
                 
                 window.adminTwoFASecret[adminUid] = secret;
                 window.adminTwoFAAttempts[adminUid] = 0;

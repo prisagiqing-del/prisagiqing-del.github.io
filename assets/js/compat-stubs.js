@@ -1,7 +1,7 @@
 
 (function(){
     try {
-        const log = (...a) => { try { console.log('[Btix-Compat]', ...a); } catch(e){} };
+        const log = (...a) => { try { console.log('[TiketKaka-Compat]', ...a); } catch(e){} };
         window.__btixCompatLoaded = true;
         if (typeof window.populateTicketSponsors !== 'function') {
             window.populateTicketSponsors = function() {};

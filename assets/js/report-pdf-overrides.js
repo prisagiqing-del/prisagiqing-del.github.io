@@ -101,7 +101,7 @@
                         <span>Total Tiket Terjual: <span style="color: #3b82f6;">${totalTiket} Tiket</span></span>
                         <span>Total Pemasukan Bersih: <span style="color: #16a34a;">${formatRp(totalPemasukan)}</span></span>
                     </div>
-                    <p style="text-align: center; font-size: 10px; color: #94a3b8; margin-top: 60px;">Digenerate otomatis oleh Sistem Ticketing Btix pada ${new Date().toLocaleString('id-ID')}</p>
+                    <p style="text-align: center; font-size: 10px; color: #94a3b8; margin-top: 60px;">Digenerate otomatis oleh Sistem Ticketing Tiket Kaka pada ${new Date().toLocaleString('id-ID')}</p>
                 </div>
             `;
 
