@@ -2841,7 +2841,7 @@
                         let img = typeof banner === 'string' ? banner : (banner.img || '');
                         let url = typeof banner === 'object' ? (banner.url || '') : '';
                         if (img) {
-                            let content = `<img src="${img}" alt="Banner" class="w-full h-full object-cover" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;">`;
+                            let content = `<img src="${img}" alt="Banner" class="w-full h-full object-contain" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;">`;
                             if (url) {
                                 content = `<a href="${url}" target="_blank" class="flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity" style="width: 100%; height: 100%;">${content}</a>`;
                             } else {
@@ -2866,9 +2866,16 @@
             }
         };
 
+        window.normalizeBrandLogoUrl = function(value) {
+            const url = (value || '').toString().trim();
+            if (!url) return '';
+            if (url.includes('Xkqq8E.png')) return '';
+            return url;
+        };
+
         window.getDefaultFooterSettings = function() {
             return {
-                logo: 'https://imagizer.imageshack.com/img922/4232/Xkqq8E.png',
+                logo: '',
                 description: 'Platform tiket event terpercaya — temukan dan beli tiket konser, festival, olahraga, dan seminar dengan mudah dan aman.',
                 company: 'Dikelola oleh Mr.Bee Project',
                 privacy: `KEBIJAKAN PRIVASI BTIX
@@ -2976,22 +2983,27 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         window.renderFooterSettings = function(payload = {}, logos = {}) {
             const defaults = window.getDefaultFooterSettings();
             const footer = { ...defaults, ...(payload && typeof payload === 'object' ? payload : {}) };
-            const logoUrl = (footer.logo || logos.nav || defaults.logo || '').toString().trim();
+            const logoUrl = window.normalizeBrandLogoUrl(footer.logo) || window.normalizeBrandLogoUrl(logos.nav) || '';
             footer.logo = logoUrl;
             window.currentFooterSettings = footer;
 
             const logoEl = document.getElementById('footer-logo');
             const logoFallback = document.getElementById('footer-brand-fallback');
             if (logoEl) {
-                logoEl.classList.remove('hidden');
-                logoEl.src = logoUrl || defaults.logo;
+                if (logoUrl) {
+                    logoEl.src = logoUrl;
+                    logoEl.classList.remove('hidden');
+                } else {
+                    logoEl.removeAttribute('src');
+                    logoEl.classList.add('hidden');
+                }
             }
-            if (logoFallback) logoFallback.classList.add('hidden');
+            if (logoFallback) logoFallback.classList.toggle('hidden', Boolean(logoUrl));
             safeSetText('footer-description', footer.description || defaults.description);
             safeSetText('footer-company', footer.company || defaults.company);
             safeSetText('footer-year', String(new Date().getFullYear()));
 
-            safeSetValue('set-footer-logo', payload?.logo || '');
+            safeSetValue('set-footer-logo', window.normalizeBrandLogoUrl(payload?.logo));
             safeSetValue('set-footer-description', footer.description || defaults.description);
             safeSetValue('set-footer-company', footer.company || defaults.company);
             safeSetValue('set-footer-privacy', footer.privacy || defaults.privacy);
@@ -3037,7 +3049,21 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 
                 safeSetValue('set-web-name', c.name || ''); safeSetValue('set-web-tagline', c.tagline || ''); safeSetValue('set-web-title', (c.title||'') + " | " + (c.sub||'')); safeSetValue('set-web-desc', c.desc || ''); safeSetValue('set-web-ev-title', c.evTitle || ''); safeSetValue('set-hero-bg', c.heroBg || '');
 
-                const l = s.logos || {}; if(l.nav) { const nm = document.getElementById('nav-logo-img'); if(nm) { nm.src = l.nav; nm.classList.remove('hidden'); document.getElementById('nav-web-name').classList.add('hidden'); } safeSetValue('set-logo-nav', l.nav); }
+                const l = s.logos || {};
+                const navLogoUrl = window.normalizeBrandLogoUrl(l.nav);
+                const navLogoEl = document.getElementById('nav-logo-img');
+                const navNameEl = document.getElementById('nav-web-name');
+                if (navLogoEl) {
+                    if (navLogoUrl) {
+                        navLogoEl.src = navLogoUrl;
+                        navLogoEl.classList.remove('hidden');
+                    } else {
+                        navLogoEl.removeAttribute('src');
+                        navLogoEl.classList.add('hidden');
+                    }
+                }
+                if (navNameEl) navNameEl.classList.toggle('hidden', Boolean(navLogoUrl));
+                safeSetValue('set-logo-nav', navLogoUrl);
                 window.renderFooterSettings(s.footer || {}, l);
                 window.sysPayment = s.payment || {};
                 window.vendorPaymentMethods = s.vendorPayments || {};
@@ -6894,7 +6920,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     evTitle: evTitleEl?.value || '', 
                     heroBg: heroBgEl?.value || '' 
                 }); 
-                if (logoNavEl) await window.db.ref('settings/logos').update({ nav: logoNavEl.value }); 
+                if (logoNavEl) await window.db.ref('settings/logos').update({ nav: window.normalizeBrandLogoUrl ? window.normalizeBrandLogoUrl(logoNavEl.value) : (logoNavEl.value || '').trim() }); 
                 Toast.fire({icon:'success', title:'Web diperbarui!'}); 
             } catch(err) {
                 Toast.fire({icon:'error', title:err.message}); 
@@ -6916,7 +6942,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 if (!descriptionEl || !companyEl || !privacyEl || !termsEl || !legalEl) throw new Error('Form footer tidak lengkap!');
 
                 const payload = {
-                    logo: (logoEl?.value || '').trim(),
+                    logo: window.normalizeBrandLogoUrl ? window.normalizeBrandLogoUrl(logoEl?.value) : (logoEl?.value || '').trim(),
                     description: descriptionEl.value.trim(),
                     company: companyEl.value.trim(),
                     privacy: privacyEl.value.trim(),
