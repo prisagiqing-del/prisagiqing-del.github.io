@@ -7,7 +7,7 @@
  */
 
 const CACHE_PREFIX = 'btix-';
-const CACHE_NAME = 'btix-tiketkaka-v14-loading-logo-only';
+const CACHE_NAME = 'btix-tiketkaka-v15-upgrade-retire-old-ticket';
 
 const APP_SHELL = [
   './',

@@ -16,6 +16,48 @@
                 return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[m];
             });
         };
+        window.getUpgradeReplacementMap = function(tickets = {}) {
+            const replacementMap = {};
+            Object.entries(tickets || {}).forEach(([replacementCode, ticket]) => {
+                const originalCode = ticket?.upgradedFrom?.originalCode;
+                if (!originalCode) return;
+                replacementMap[originalCode] = {
+                    replacementCode,
+                    targetCategory: ticket.category || '',
+                    upgradedAt: ticket.upgradedAt || ticket.createdAt || null,
+                    upgradePaymentId: ticket.upgradePaymentId || ticket.paymentId || ''
+                };
+            });
+            return replacementMap;
+        };
+        window.isTicketReplacedByUpgrade = function(ticket, ticketCode = '', replacementMap = null) {
+            if (!ticket) return false;
+            if (ticket.replacedByUpgrade === true || ticket.invalidatedReason === 'UPGRADE' || ticket.upgradedToTicketCode) return true;
+            const map = replacementMap || window.userUpgradeReplacementMap || {};
+            const resolvedCode = ticketCode || ticket.code || '';
+            return !!(resolvedCode && map[resolvedCode]);
+        };
+        window.findUpgradeReplacementTicket = async function(originalCode) {
+            if (!originalCode) return null;
+            const cached = window.userUpgradeReplacementMap?.[originalCode];
+            if (cached) return cached;
+            if (!window.db) return null;
+            try {
+                const snap = await window.db.ref('tickets').orderByChild('upgradedFrom/originalCode').equalTo(originalCode).limitToFirst(1).once('value');
+                const data = snap.val() || {};
+                const replacementCode = Object.keys(data)[0];
+                const ticket = replacementCode ? data[replacementCode] : null;
+                if (!ticket) return null;
+                return {
+                    replacementCode,
+                    targetCategory: ticket.category || '',
+                    upgradedAt: ticket.upgradedAt || ticket.createdAt || null,
+                    upgradePaymentId: ticket.upgradePaymentId || ticket.paymentId || ''
+                };
+            } catch (e) {
+                return null;
+            }
+        };
         const formatRichTextHtml = (text) => {
             if (text === undefined || text === null) return '';
             const raw = text.toString().replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
@@ -383,8 +425,9 @@
                 const ticketSnap = await db.ref('tickets').orderByChild('eventId').equalTo(eventId).once('value');
                 const tickets = ticketSnap.val() || {};
                 const summary = { total: 0, presale_sold: 0, reg_eco_sold: 0, reg_vip_sold: 0, reg_vvip_sold: 0, trs_eco_sold: 0, trs_vip_sold: 0 };
-                Object.values(tickets).forEach(t => {
-                    if (!t || !t.eventId || t.status === 'TRANSFERRED') return;
+                const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
+                Object.entries(tickets).forEach(([ticketCode, t]) => {
+                    if (!t || !t.eventId || t.status === 'TRANSFERRED' || window.isTicketReplacedByUpgrade(t, ticketCode, upgradeReplacementMap)) return;
                     summary.total += 1;
                     const catKey = window.getEventCategorySoldKey(t.category);
                     if (catKey) summary[catKey] = (summary[catKey] || 0) + 1;
@@ -410,8 +453,9 @@
                 kon_ecoQ: 0, kon_ecoR: 0, kon_vipQ: 0, kon_vipR: 0, kon_vvipQ: 0, kon_vvipR: 0,
                 spo_ecoQ: 0, spo_ecoR: 0, spo_vipQ: 0, spo_vipR: 0, spo_vvipQ: 0, spo_vvipR: 0
             };
-            Object.values(tickets).forEach(t => {
-                if (!t || t.type === 'sponsor' || t.status === 'TRANSFERRED') return;
+            const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
+            Object.entries(tickets).forEach(([ticketCode, t]) => {
+                if (!t || t.type === 'sponsor' || t.status === 'TRANSFERRED' || window.isTicketReplacedByUpgrade(t, ticketCode, upgradeReplacementMap)) return;
                 const eventData = window.eventDataMap?.[t.eventId] || {};
                 const evOwner = eventData.ownerId || 'SUPER_ADMIN';
                 if (targetOwnerId && evOwner !== targetOwnerId) return;
@@ -2702,7 +2746,11 @@
         window.updateFinanceSummaryCards = function(ownerId = null) {
             try {
                 const paymentEntries = Object.entries(window.globalPaymentsData || {}).filter(([, payment]) => payment);
-                const ticketEntries = Object.values(window.globalTicketsData || {}).filter(Boolean);
+                const allTickets = window.globalTicketsData || {};
+                const upgradeReplacementMap = window.getUpgradeReplacementMap(allTickets);
+                const ticketEntries = Object.entries(allTickets)
+                    .filter(([ticketCode, ticket]) => ticket && !window.isTicketReplacedByUpgrade(ticket, ticketCode, upgradeReplacementMap))
+                    .map(([, ticket]) => ticket);
                 const users = window.usersMapCache || {};
                 const events = window.eventDataMap || {};
                 const targetOwnerId = ownerId || (window.isVendor ? window.currentUserData?.uid : null);
@@ -3557,8 +3605,38 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             }
         };
 
+        window.__repairingLegacyUpgradeTickets = false;
+        window.repairLegacyUpgradedTickets = async function(ticketsData = window.globalTicketsData || {}) {
+            if (window.__repairingLegacyUpgradeTickets || (!window.isSuperAdmin && !window.isVendor) || !window.db) return;
+            const replacementMap = window.getUpgradeReplacementMap(ticketsData);
+            const updates = {};
+            Object.entries(replacementMap).forEach(([originalCode, replacement]) => {
+                const oldTicket = ticketsData[originalCode];
+                if (!oldTicket || oldTicket.replacedByUpgrade === true || oldTicket.invalidatedReason === 'UPGRADE' || oldTicket.upgradedToTicketCode) return;
+                const ticketOwnerId = oldTicket.ownerId || window.eventDataMap?.[oldTicket.eventId]?.ownerId || 'SUPER_ADMIN';
+                if (window.isVendor && ticketOwnerId !== window.currentUserData?.uid) return;
+                if (oldTicket.status === 'TRANSFERRED' || oldTicket.status === 'TRANSFER_PENDING') return;
+                updates[`tickets/${originalCode}/status`] = 'USED';
+                updates[`tickets/${originalCode}/replacedByUpgrade`] = true;
+                updates[`tickets/${originalCode}/invalidatedReason`] = 'UPGRADE';
+                updates[`tickets/${originalCode}/upgradedAt`] = replacement.upgradedAt || Date.now();
+                updates[`tickets/${originalCode}/upgradedToTicketCode`] = replacement.replacementCode || '';
+                if (replacement.upgradePaymentId) updates[`tickets/${originalCode}/upgradePaymentId`] = replacement.upgradePaymentId;
+            });
+            if (!Object.keys(updates).length) return;
+            window.__repairingLegacyUpgradeTickets = true;
+            try {
+                await window.db.ref().update(updates);
+            } catch (e) {
+                console.warn('[repairLegacyUpgradedTickets]', e);
+            } finally {
+                window.__repairingLegacyUpgradeTickets = false;
+            }
+        };
+
         window.renderAdminTicketTablesFromCache = function(data = window.globalTicketsData || {}) {
             const ticketsData = data || {};
+            const upgradeReplacementMap = window.getUpgradeReplacementMap(ticketsData);
             window.globalTicketsData = ticketsData;
             window.userTicketCount = {};
             window.userTicketCountOwn = {};
@@ -3576,9 +3654,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 if (!t) return;
                 const tOwner = t.ownerId || 'SUPER_ADMIN';
                 const isMine = tOwner === window.currentUserData?.uid || (window.isSuperAdmin && tOwner === 'SUPER_ADMIN');
+                const isUpgraded = window.isTicketReplacedByUpgrade(t, k, upgradeReplacementMap);
                 if (window.isVendor && !isMine) return;
 
-                if (t.type !== 'sponsor') {
+                if (t.type !== 'sponsor' && !isUpgraded) {
                     window.userTicketCount[t.uid] = (window.userTicketCount[t.uid] || 0) + 1;
                     if (isMine) {
                         window.userTicketCountOwn[t.uid] = (window.userTicketCountOwn[t.uid] || 0) + 1;
@@ -3587,12 +3666,14 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
                 const isSponsor = t.type === 'sponsor';
                 const isTerusan = (t.category || '').toLowerCase().includes('terusan');
-                if (isSponsor || isTerusan) {
-                    gateTotal++;
-                    if (t.remaining <= 0) gateUsed++; else gateActive++;
-                } else {
-                    gateTotal++;
-                    if (t.status === 'USED') gateUsed++; else gateActive++;
+                if (!isUpgraded) {
+                    if (isSponsor || isTerusan) {
+                        gateTotal++;
+                        if (t.remaining <= 0) gateUsed++; else gateActive++;
+                    } else {
+                        gateTotal++;
+                        if (t.status === 'USED') gateUsed++; else gateActive++;
+                    }
                 }
 
                 if (!isMine) return;
@@ -3602,7 +3683,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 else if (isTerusan) catLabel = `<span class="text-green-400 font-bold">${t.category}</span>`;
 
                 let statLabel = '';
-                if (isSponsor || isTerusan) {
+                if (isUpgraded) {
+                    statLabel = `<span class="text-purple-300 font-bold bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">SUDAH DI-UPGRADE</span>`;
+                } else if (isSponsor || isTerusan) {
                     statLabel = `<span class="text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">${t.remaining}/${t.quota} Sisa Scan</span>`;
                 } else {
                     statLabel = `<span class="font-bold ${t.status === 'ACTIVE' ? 'text-green-500' : 'text-red-500'}">${t.status}</span>`;
@@ -3610,7 +3693,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
                 if (tt) {
                     const rowDeleteBtn = window.isVendor ? '' : `<button type="button" onclick="window.deleteTicketEntry('${k}', '${t.code || ''}')" class="text-red-400 cursor-pointer text-xs hover:text-red-300">Hapus</button>`;
-                    tt.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3 font-mono text-amber-500">${t.code}</td><td class="px-4 py-3">${t.userName}</td><td class="px-4 py-3 truncate max-w-[150px]">${t.eventName}</td><td class="px-4 py-3 text-xs">${catLabel}</td><td class="px-4 py-3 text-xs">${statLabel}</td><td class="px-4 py-3 text-xs">${t.suspendedMessage ? ('<span class="text-xs text-amber-300 truncate max-w-[200px]">' + (t.suspendedMessage || '') + '</span>') : '-'}</td><td class="px-4 py-3 space-x-1 flex gap-1"><button type="button" onclick="viewTicket('${k}')" class="text-blue-400 cursor-pointer text-xs hover:text-blue-300">Lihat</button><button type="button" onclick="window.openSuspendTicket('${k}')" class="text-orange-400 cursor-pointer text-xs hover:text-orange-300">Tangguhkan</button>${rowDeleteBtn}${t.customFormAnswers ? `<button type="button" class="text-purple-400 cursor-pointer text-xs hover:text-purple-300 view-custom-answers" data-answers="${encodeURIComponent(JSON.stringify(t.customFormAnswers || {}))}" data-code="${t.code}" data-eventid="${t.eventId || ''}" title="Lihat Data Tambahan"><i class="fa-solid fa-file-lines"></i></button>` : ''}</td></tr>`;
+                    const rowMainActions = isUpgraded
+                        ? `<span class="text-purple-300 text-xs font-semibold cursor-not-allowed"><i class="fa-solid fa-ban mr-1"></i>Tidak aktif</span>`
+                        : `<button type="button" onclick="viewTicket('${k}')" class="text-blue-400 cursor-pointer text-xs hover:text-blue-300">Lihat</button><button type="button" onclick="window.openSuspendTicket('${k}')" class="text-orange-400 cursor-pointer text-xs hover:text-orange-300">Tangguhkan</button>`;
+                    tt.innerHTML += `<tr class="border-b border-white/5 ${isUpgraded ? 'opacity-60' : ''}"><td class="px-4 py-3 font-mono text-amber-500">${t.code}</td><td class="px-4 py-3">${t.userName}</td><td class="px-4 py-3 truncate max-w-[150px]">${t.eventName}</td><td class="px-4 py-3 text-xs">${catLabel}</td><td class="px-4 py-3 text-xs">${statLabel}</td><td class="px-4 py-3 text-xs">${isUpgraded ? ('Diganti oleh: ' + (t.upgradedToTicketCode || upgradeReplacementMap[k]?.replacementCode || '-')) : (t.suspendedMessage ? ('<span class="text-xs text-amber-300 truncate max-w-[200px]">' + (t.suspendedMessage || '') + '</span>') : '-')}</td><td class="px-4 py-3 space-x-1 flex gap-1">${rowMainActions}${rowDeleteBtn}${t.customFormAnswers ? `<button type="button" class="text-purple-400 cursor-pointer text-xs hover:text-purple-300 view-custom-answers" data-answers="${encodeURIComponent(JSON.stringify(t.customFormAnswers || {}))}" data-code="${t.code}" data-eventid="${t.eventId || ''}" title="Lihat Data Tambahan"><i class="fa-solid fa-file-lines"></i></button>` : ''}</td></tr>`;
                 }
 
                 if (isSponsor && st) {
@@ -3663,6 +3749,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             db.ref('tickets').on('value', snap => {
                 const data = snap.val() || {};
                 window.renderAdminTicketTablesFromCache(data);
+                window.repairLegacyUpgradedTickets?.(data);
             });
 
             db.ref('payments').on('value', snap => {
@@ -3768,8 +3855,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
             let gateTotal = 0, gateUsed = 0, gateActive = 0;
             let tixUids = new Set();
-            Object.values(window.globalTicketsData || {}).forEach(t => {
-                if(t.ownerId === vid) {
+            const vendorTickets = window.globalTicketsData || {};
+            const upgradeReplacementMap = window.getUpgradeReplacementMap(vendorTickets);
+            Object.entries(vendorTickets).forEach(([ticketCode, t]) => {
+                if(t.ownerId === vid && !window.isTicketReplacedByUpgrade(t, ticketCode, upgradeReplacementMap)) {
                     if(t.type !== 'sponsor') tixUids.add(t.uid);
                     const isSponsor = t.type === 'sponsor';
                     const isTerusan = (t.category || '').toLowerCase().includes('terusan');
@@ -4078,9 +4167,14 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             db.ref('tickets').orderByChild('uid').equalTo(uid).on('value', snap => {
                 const c = document.getElementById('user-tickets-container'); if(!c) return;
                 c.innerHTML = ''; const data = snap.val() || {}; const keys = Object.keys(data);
+                const upgradeReplacementMap = window.getUpgradeReplacementMap(data);
+                window.userUpgradeReplacementMap = upgradeReplacementMap;
+                window.userUpgradedTicketCodes = new Set(Object.keys(upgradeReplacementMap));
                 if(keys.length === 0) { c.innerHTML = '<div class="col-span-full text-center py-10 text-gray-500 border border-dashed border-white/10 rounded-xl">Belum ada tiket aktif.</div>'; return; }
                 keys.reverse().forEach(k => {
                     const t = data[k]; const isSponsor = t.type === 'sponsor'; const isTerusan = (t.category || '').toLowerCase().includes('terusan');
+                    const upgradeReplacement = upgradeReplacementMap[k] || null;
+                    const isUpgraded = window.isTicketReplacedByUpgrade(t, k, upgradeReplacementMap);
                     const isTransferred = t.status === 'TRANSFERRED';
                     const isTransferPending = t.status === 'TRANSFER_PENDING';
                     const seatValues = (t.selectedSeat || '').toString().split(/\s*,\s*/).filter(Boolean);
@@ -4096,7 +4190,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         let statusUi = '';
                         let adminMsgHtml = '';
                         let cardOverlayHtml = '';
-                        if (isTransferred) { statusUi = `<span class="text-gray-400 font-bold text-xs">TRANSFER</span>`; }
+                        if (isUpgraded) { statusUi = `<span class="text-purple-300 font-bold bg-purple-500/10 px-2 py-1 rounded text-xs border border-purple-500/30">SUDAH DI-UPGRADE</span>`; }
+                        else if (isTransferred) { statusUi = `<span class="text-gray-400 font-bold text-xs">TRANSFER</span>`; }
                         else if (isTransferPending) { statusUi = `<span class="text-amber-400 font-bold text-xs">TRANSFER DIPROSES</span>`; }
                         else if (ticketEntry.status === 'SUSPENDED') {
                             statusUi = `<span class="text-amber-400 font-bold bg-amber-500/10 px-2 py-1 rounded text-xs border border-amber-500/30">🟠 DITANGGUHKAN</span>`;
@@ -4109,7 +4204,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         const showActionButtons = !ticketEntry.virtualSeatSplit;
                         let transferBtnHtml = '';
                         let upgradeBtnHtml = '';
-                        if (ticketEntry.status === 'ACTIVE' && showActionButtons && !isSponsor && !isTerusan) {
+                        if (ticketEntry.status === 'ACTIVE' && !isUpgraded && showActionButtons && !isSponsor && !isTerusan) {
                             transferBtnHtml = `<button type="button" onclick="openTransferTicketModal('${k}', '${ticketEntry.code}', '${ticketEntry.eventName}')" class="border border-green-500 text-green-500 hover:bg-green-500/10 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"><i class="fa-solid fa-share-nodes mr-1"></i> Transfer</button>`;
                             if (window.canUpgradeTicketCategory(ticketEntry.category)) {
                                 upgradeBtnHtml = `<button type="button" onclick="openUpgradeTicketModal('${k}')" class="border border-amber-500 text-amber-500 hover:bg-amber-500/10 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"><i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> Upgrade</button>`;
@@ -4117,7 +4212,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         }
                         const isLegacySplit = ticketEntry.virtualSeatSplit === true;
                         let actionBtnHtml = '';
-                        if (ticketEntry.status === 'TRANSFERRED') {
+                        if (isUpgraded) {
+                            actionBtnHtml = `<button type="button" class="border border-purple-500/50 text-purple-300 px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-70" disabled><i class="fa-solid fa-arrow-up-right-dots mr-1"></i> UPGRADE</button>`;
+                        } else if (ticketEntry.status === 'TRANSFERRED') {
                             actionBtnHtml = `<button type="button" class="border border-gray-600 text-gray-400 px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-70" disabled><i class="fa-solid fa-right-left mr-1"></i> TRANSFER</button>`;
                         } else if (ticketEntry.status === 'TRANSFER_PENDING') {
                             actionBtnHtml = `<button type="button" class="border border-amber-600 text-amber-400 px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-70" disabled><i class="fa-solid fa-spinner fa-spin mr-1"></i> DIPROSES</button>`;
@@ -4129,12 +4226,16 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             actionBtnHtml = `<button type="button" onclick="viewTicket('${k}')" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">Lihat Tiket</button>`;
                         }
                         let transferredBadgeHtml = isTransferred ? `<div class="bg-gray-600 text-white font-bold px-3 py-1 text-xs rounded-full mb-2 inline-block"><i class="fa-solid fa-right-left mr-1"></i> TRANSFER</div>` : '';
+                        const upgradedBadgeHtml = isUpgraded ? `<div class="bg-purple-600 text-white font-bold px-3 py-1 text-xs rounded-full mb-2 inline-block"><i class="fa-solid fa-arrow-up-right-dots mr-1"></i> SUDAH DI-UPGRADE</div>` : '';
                         let transferredToHtml = isTransferred ? `<p class="text-xs text-gray-400 mb-3"><i class="fa-solid fa-arrow-right text-orange-400 mr-1"></i>Telah dikirim ke: <span class="text-gray-300 font-semibold">${ticketEntry.transferredTo || 'unknown'}</span></p>` : '';
-                        let cardOpacity = (isTransferred || isTransferPending) ? 'opacity-60' : '';
+                        const upgradedToCode = ticketEntry.upgradedToTicketCode || upgradeReplacement?.replacementCode || '';
+                        const upgradedToCategory = upgradeReplacement?.targetCategory || '';
+                        const upgradedInfoHtml = isUpgraded ? `<p class="text-xs text-purple-200 mb-3"><i class="fa-solid fa-circle-info mr-1"></i>Tiket lama tidak berlaku${upgradedToCategory ? `, telah diganti menjadi <span class="font-semibold">${upgradedToCategory}</span>` : ''}${upgradedToCode ? ` dengan kode <span class="font-mono font-semibold">${upgradedToCode}</span>` : ''}.</p>` : '';
+                        let cardOpacity = (isTransferred || isTransferPending || isUpgraded) ? 'opacity-60' : '';
                         let seatInfo = ticketEntry.selectedTribun ? `<p class="text-xs text-gray-300 mb-2">Tribun: <span class="text-white font-semibold">${ticketEntry.selectedTribun}</span>${ticketEntry.selectedSeat ? ` • Kursi: <span class="text-white font-semibold">${ticketEntry.selectedSeat}</span>` : ''}</p>` : '';
                         const ticketCodeDisplay = ticketEntry.virtualSeatSplit ? (ticketEntry.virtualCode || ticketEntry.code) : ticketEntry.code;
                         const legacyNote = ticketEntry.virtualSeatSplit ? `<p class="text-xs text-emerald-300 mb-2">(Tiket virtual per kursi dari data lama, pemindaian/transfer berlaku pada kode asli ${ticketEntry.virtualParentCode})</p>` : '';
-                        c.innerHTML += `<div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden ${cardOpacity}">${cardOverlayHtml}<div class="absolute top-0 right-0 bg-amber-500 text-dark font-bold px-3 py-1 text-xs rounded-bl-lg">${ticketEntry.category} ${extraLabel}</div>${transferredBadgeHtml}<h3 class="font-bold text-lg mb-1 pr-20">${ticketEntry.eventName}</h3><p class="text-xs text-gray-400 mb-1">Kode: <span class="text-white font-mono bg-dark/50 px-2 py-0.5 rounded">${ticketCodeDisplay}</span></p>${seatInfo}${legacyNote}${transferredToHtml}${adminMsgHtml}<div class="flex justify-between items-center gap-2 mt-4"><div>${statusUi}</div><div class="flex gap-2">${transferBtnHtml}${upgradeBtnHtml}${actionBtnHtml}</div></div></div>`;
+                        c.innerHTML += `<div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden ${cardOpacity}">${cardOverlayHtml}<div class="absolute top-0 right-0 bg-amber-500 text-dark font-bold px-3 py-1 text-xs rounded-bl-lg">${ticketEntry.category} ${extraLabel}</div>${upgradedBadgeHtml}${transferredBadgeHtml}<h3 class="font-bold text-lg mb-1 pr-20">${ticketEntry.eventName}</h3><p class="text-xs text-gray-400 mb-1">Kode: <span class="text-white font-mono bg-dark/50 px-2 py-0.5 rounded">${ticketCodeDisplay}</span></p>${seatInfo}${legacyNote}${upgradedInfoHtml}${transferredToHtml}${adminMsgHtml}<div class="flex justify-between items-center gap-2 mt-4"><div>${statusUi}</div><div class="flex gap-2">${transferBtnHtml}${upgradeBtnHtml}${actionBtnHtml}</div></div></div>`;
                     });
                 });
             });
@@ -4472,9 +4573,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
             const ticketsSnap = await db.ref('tickets').orderByChild('eventId').equalTo(eventId).once('value');
             const tickets = ticketsSnap.val() || {};
-            Object.values(tickets).forEach(t => {
+            const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
+            Object.entries(tickets).forEach(([ticketCode, t]) => {
                 if (!t || t.selectedTribun !== selectedTribun || !t.selectedSeat) return;
-                if (t.status === 'TRANSFERRED') return;
+                if (t.status === 'TRANSFERRED' || window.isTicketReplacedByUpgrade(t, ticketCode, upgradeReplacementMap)) return;
                 const seatValues = ('' + t.selectedSeat).split(/\s*,\s*/).map(s => parseInt(s, 10)).filter(n => Number.isFinite(n));
                 seatValues.forEach(n => bookedSeats.push(n));
             });
@@ -5483,12 +5585,24 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             delete upgradedTicket.selectedSeat;
                         }
 
+                        const retiredOldTicket = cleanObject({
+                            ...ticketData,
+                            status: 'USED',
+                            replacedByUpgrade: true,
+                            invalidatedReason: 'UPGRADE',
+                            upgradedAt,
+                            upgradedToTicketCode: newTicketCode,
+                            upgradePaymentId: key
+                        });
+                        delete retiredOldTicket.scannedAt;
+                        delete retiredOldTicket.scannedBy;
+
                         const upgradeUpdates = {};
                         upgradeUpdates[`payments/${key}/status`] = 'APPROVED';
                         upgradeUpdates[`payments/${key}/approvedAt`] = upgradedAt;
                         upgradeUpdates[`payments/${key}/replacedTicketCode`] = ticketCode;
                         upgradeUpdates[`payments/${key}/upgradedTicketCode`] = newTicketCode;
-                        upgradeUpdates[`tickets/${ticketCode}`] = null;
+                        upgradeUpdates[`tickets/${ticketCode}`] = retiredOldTicket;
                         upgradeUpdates[`tickets/${newTicketCode}`] = cleanObject(upgradedTicket);
                         if (oldPaymentId && oldPaymentId !== key && (originalSelectedTribun || originalSelectedSeat)) {
                             if (originalSelectedTribun) upgradeUpdates[`payments/${oldPaymentId}/selectedTribun`] = null;
@@ -5496,7 +5610,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             upgradeUpdates[`payments/${oldPaymentId}/seatReleasedByUpgrade`] = true;
                         }
 
-                        // Pembayaran, penghapusan tiket lama, dan pembuatan tiket upgrade diproses bersamaan.
+                        // Pembayaran, penonaktifan tiket lama, dan pembuatan tiket upgrade diproses bersamaan.
                         await db.ref().update(upgradeUpdates);
                         if (window.globalPaymentsData) {
                             window.globalPaymentsData[key] = {
@@ -5508,12 +5622,18 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             };
                         }
                         if (window.globalTicketsData) {
-                            delete window.globalTicketsData[ticketCode];
+                            window.globalTicketsData[ticketCode] = retiredOldTicket;
                             window.globalTicketsData[newTicketCode] = cleanObject(upgradedTicket);
                         }
+                        try {
+                            const localTickets = JSON.parse(localStorage.getItem('beetix_local_tix') || '{}');
+                            localTickets[ticketCode] = retiredOldTicket;
+                            localTickets[newTicketCode] = cleanObject(upgradedTicket);
+                            localStorage.setItem('beetix_local_tix', JSON.stringify(localTickets));
+                        } catch (e) {}
                         await window.reconcileEventTicketCounts(evId);
                         window.refreshDashboardAfterDataMutation?.();
-                        Toast.fire({icon:'success', title:'Upgrade disetujui! Tiket lama dihapus dan tiket baru diterbitkan.'});
+                        Toast.fire({icon:'success', title:'Upgrade disetujui! Tiket lama dinonaktifkan dan tiket baru diterbitkan.'});
                     } else {
                         await db.ref(`payments/${key}`).update({status: 'APPROVED', approvedAt: firebase.database.ServerValue.TIMESTAMP});
                         if (window.globalPaymentsData) {
@@ -5611,17 +5731,55 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
             }
 
+            let discoveredUpgradeReplacement = null;
+            const lookupOriginalCode = tData?.originalCode || cleanCode;
+            if (tData && tData.status === 'ACTIVE' && !window.isTicketReplacedByUpgrade(tData, lookupOriginalCode)) {
+                discoveredUpgradeReplacement = await window.findUpgradeReplacementTicket(lookupOriginalCode);
+                if (discoveredUpgradeReplacement) {
+                    tData = {
+                        ...tData,
+                        status: 'USED',
+                        replacedByUpgrade: true,
+                        invalidatedReason: 'UPGRADE',
+                        upgradedAt: discoveredUpgradeReplacement.upgradedAt || tData.upgradedAt || Date.now(),
+                        upgradedToTicketCode: discoveredUpgradeReplacement.replacementCode || ''
+                    };
+                    try {
+                        const localTickets = JSON.parse(localStorage.getItem('beetix_local_tix') || '{}');
+                        localTickets[lookupOriginalCode] = tData;
+                        localStorage.setItem('beetix_local_tix', JSON.stringify(localTickets));
+                    } catch (e) {}
+                    const ticketOwnerId = tData.ownerId || (window.eventDataMap?.[tData.eventId]?.ownerId || 'SUPER_ADMIN');
+                    const canRepairRecord = window.isSuperAdmin || (window.isVendor && ticketOwnerId === window.currentUserData?.uid);
+                    if (canRepairRecord && isOnline) {
+                        db.ref(`tickets/${lookupOriginalCode}`).update({
+                            status: 'USED',
+                            replacedByUpgrade: true,
+                            invalidatedReason: 'UPGRADE',
+                            upgradedAt: tData.upgradedAt,
+                            upgradedToTicketCode: tData.upgradedToTicketCode
+                        }).catch(() => {});
+                    }
+                }
+            }
+            const isUpgradedTicket = window.isTicketReplacedByUpgrade(tData, lookupOriginalCode) || !!discoveredUpgradeReplacement;
+            const vendorTicketOwnerId = tData ? (tData.ownerId || (window.eventDataMap?.[tData.eventId]?.ownerId || 'SUPER_ADMIN')) : '';
+            const vendorOwnerMismatch = !!(tData && window.isVendor && vendorTicketOwnerId !== window.currentUserData?.uid);
+
             if(!tData) {
                 playScanFeedback('error');
                 resArea.innerHTML = `<div class="bg-red-500/20 text-red-500 p-4 rounded-xl text-center shadow-[0_0_20px_rgba(239,68,68,0.2)]"><i class="fa-solid fa-xmark text-4xl mb-2"></i><br><b class="text-xl">TIKET TIDAK VALID / TIDAK DITEMUKAN</b></div>`;
-            } else if (window.isVendor) {
-                const ticketOwnerId = tData.ownerId || (window.eventDataMap?.[tData.eventId]?.ownerId || 'SUPER_ADMIN');
-                if (ticketOwnerId !== window.currentUserData?.uid) {
-                    playScanFeedback('error');
-                    resArea.innerHTML = `<div class="bg-red-500/20 text-red-500 p-4 rounded-xl text-center shadow-[0_0_20px_rgba(239,68,68,0.2)]"><i class="fa-solid fa-xmark text-4xl mb-2"></i><br><b class="text-xl">Akses Ditolak</b><br><span class="text-sm">Tiket ini bukan milik vendor Anda.</span></div>`;
-                    window.scanTimeoutId = setTimeout(() => { window.isProcessingScan = false; }, 1500);
-                    return;
-                }
+            } else if (vendorOwnerMismatch) {
+                playScanFeedback('error');
+                resArea.innerHTML = `<div class="bg-red-500/20 text-red-500 p-4 rounded-xl text-center shadow-[0_0_20px_rgba(239,68,68,0.2)]"><i class="fa-solid fa-xmark text-4xl mb-2"></i><br><b class="text-xl">Akses Ditolak</b><br><span class="text-sm">Tiket ini bukan milik vendor Anda.</span></div>`;
+                window.scanTimeoutId = setTimeout(() => { window.isProcessingScan = false; }, 1500);
+                return;
+            } else if (isUpgradedTicket) {
+                playScanFeedback('error');
+                const replacementCodeText = tData.upgradedToTicketCode || discoveredUpgradeReplacement?.replacementCode || '';
+                resArea.innerHTML = `<div class="bg-purple-500/20 border-2 border-purple-500 text-purple-200 p-6 rounded-xl text-center shadow-[0_0_20px_rgba(168,85,247,0.25)]"><i class="fa-solid fa-arrow-up-right-dots text-5xl mb-3"></i><br><b class="text-3xl tracking-wider">TIKET SUDAH DI-UPGRADE</b><br><div class="mt-4 text-sm text-purple-100 bg-purple-950/50 p-3 rounded text-left"><p>Tiket lama ini sudah tidak berlaku dan tidak dapat digunakan untuk masuk.</p>${replacementCodeText ? `<p class="mt-2"><b>Kode tiket pengganti:</b> ${replacementCodeText}</p>` : ''}</div></div>`;
+                window.scanTimeoutId = setTimeout(() => { window.isProcessingScan = false; }, 1500);
+                return;
             } else if (tData.status === 'TRANSFER_PENDING') {
                 playScanFeedback('error');
                 resArea.innerHTML = `<div class="bg-amber-500/20 border-2 border-amber-500 text-amber-300 p-6 rounded-xl text-center"><i class="fa-solid fa-spinner fa-spin text-5xl mb-3"></i><br><b class="text-3xl tracking-wider">TRANSFER DIPROSES</b><br><p class="mt-3 text-sm">Tiket sedang dikunci untuk proses transfer dan belum dapat digunakan.</p></div>`;
@@ -5691,6 +5849,13 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 activeTicketRef = db.ref(`tickets/${tcode}`);
                 activeTicketCb = activeTicketRef.on('value', async (snap) => {
                     const tix = snap.val(); if(!tix) return;
+                    if (window.isTicketReplacedByUpgrade(tix, tcode)) {
+                        closeModal('ticket-modal');
+                        if (activeTicketRef && activeTicketCb) activeTicketRef.off('value', activeTicketCb);
+                        activeTicketRef = null;
+                        activeTicketCb = null;
+                        return Swal.fire({ icon:'info', title:'Tiket Sudah Di-upgrade', text:'Tiket lama hanya disimpan sebagai riwayat dan tidak dapat dibuka atau digunakan lagi.', background:'#1e293b', color:'#fff' });
+                    }
                     if (tix.status === 'TRANSFER_PENDING') {
                         closeModal('ticket-modal');
                         if (activeTicketRef && activeTicketCb) activeTicketRef.off('value', activeTicketCb);
@@ -5880,6 +6045,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
         async function openTicketModalWithData(ticketData, ticketKey) {
             try {
+                if (window.isTicketReplacedByUpgrade(ticketData, ticketKey || ticketData?.code || '')) {
+                    return Swal.fire({ icon:'info', title:'Tiket Sudah Di-upgrade', text:'Tiket lama hanya disimpan sebagai riwayat dan tidak dapat dibuka atau digunakan lagi.', background:'#1e293b', color:'#fff' });
+                }
                 if (ticketData?.status === 'TRANSFERRED') {
                     return Swal.fire({ icon:'info', title:'Tiket Sudah Ditransfer', text:'Tiket lama hanya disimpan sebagai riwayat dan tidak dapat dibuka atau digunakan lagi.', background:'#1e293b', color:'#fff' });
                 }
@@ -5996,6 +6164,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         }
 
         window.openTransferTicketModal = function(ticketCode, code, eventName) {
+            if (window.userUpgradedTicketCodes?.has(ticketCode)) {
+                return Swal.fire({icon:'info', title:'Tiket Sudah Di-upgrade', text:'Tiket lama tidak dapat ditransfer.', background:'#1e293b', color:'#fff'});
+            }
             window.pendingTransferData = { ticketCode: ticketCode, code: code, eventName: eventName };
             openModal('transfer-confirm-modal');
         };
@@ -6012,6 +6183,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const ticketSnap = await db.ref(`tickets/${ticketKey}`).once('value');
                 const ticket = ticketSnap.val();
                 if (!ticket) return Swal.fire({icon:'error', title:'Tiket tidak ditemukan', text:'Silakan coba lagi atau hubungi admin.', background:'#1e293b', color:'#fff'});
+                const replacementTicket = window.isTicketReplacedByUpgrade(ticket, ticketKey) ? (window.userUpgradeReplacementMap?.[ticketKey] || {}) : await window.findUpgradeReplacementTicket(ticketKey);
+                if (window.isTicketReplacedByUpgrade(ticket, ticketKey) || replacementTicket) return Swal.fire({icon:'info', title:'Tiket Sudah Di-upgrade', text:'Tiket lama tidak dapat di-upgrade kembali.', background:'#1e293b', color:'#fff'});
                 if (ticket.status !== 'ACTIVE') return Swal.fire({icon:'warning', title:'Tidak dapat upgrade', text:'Hanya tiket aktif yang bisa di-upgrade.', background:'#1e293b', color:'#fff'});
                 if (!window.canUpgradeTicketCategory(ticket.category)) return Swal.fire({icon:'info', title:'Upgrade tidak tersedia', text:'Kategori tiket ini tidak bisa di-upgrade ke VIP/VVIP.', background:'#1e293b', color:'#fff'});
 
@@ -6264,6 +6437,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
                 if (originalTicket.uid !== currentUser.uid) {
                     return Swal.fire({icon:'error', title:'Akses Ditolak', text:'Tiket ini bukan milik akun Anda.', background:'#1e293b', color:'#fff'});
+                }
+                const upgradeReplacement = window.isTicketReplacedByUpgrade(originalTicket, ticketCode) ? (window.userUpgradeReplacementMap?.[ticketCode] || {}) : await window.findUpgradeReplacementTicket(ticketCode);
+                if (window.isTicketReplacedByUpgrade(originalTicket, ticketCode) || upgradeReplacement) {
+                    return Swal.fire({icon:'info', title:'Tiket Sudah Di-upgrade', text:'Tiket lama tidak dapat ditransfer atau digunakan lagi.', background:'#1e293b', color:'#fff'});
                 }
                 if (originalTicket.status !== 'ACTIVE') {
                     return Swal.fire({icon:'error', title:'Tiket Tidak Aktif', text:'Hanya tiket ACTIVE yang bisa ditransfer!', background:'#1e293b', color:'#fff'});
@@ -7657,12 +7834,13 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const payments = paymentsSnap.val() || {};
             const users = usersSnap.val() || {};
             const events = eventsSnap.val() || {};
+            const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
             
             // Group by buyer + event (tidak filter di sini, filter di payment checking)
             const grouped = {};
             Object.keys(tickets).forEach(tkey => {
                 const t = tickets[tkey];
-                if (!t.uid || !t.eventId) return;
+                if (!t.uid || !t.eventId || window.isTicketReplacedByUpgrade(t, tkey, upgradeReplacementMap)) return;
                 
                 const key = `${t.uid}_${t.eventId}`;
                 if (!grouped[key]) grouped[key] = [];
@@ -7834,6 +8012,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const tickets = ticketsSnap.val() || {};
                 const events = eventsSnap.val() || {};
                 const users = usersSnap.val() || {};
+                const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
                 const selectedEvent = selectedEventId ? events[selectedEventId] : null;
                 if (selectedEventId && selectedEvent && !selectedEvent.raffle_enabled) {
                     Swal.fire({ icon: 'warning', title: 'Event Tidak Aktif untuk Undian', text: 'Event ini belum diaktifkan untuk undian. Silakan aktifkan undian pada edit event terlebih dahulu.', background: '#1e293b', color: '#fff' });
@@ -7844,7 +8023,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
                 Object.keys(tickets).forEach((ticketKey, index) => {
                     const t = tickets[ticketKey];
-                    if (!t || !t.uid || !t.eventId) return;
+                    if (!t || !t.uid || !t.eventId || window.isTicketReplacedByUpgrade(t, ticketKey, upgradeReplacementMap)) return;
                     const evt = events[t.eventId];
                     if (!evt || !evt.raffle_enabled) return;
                     if (selectedEventId && t.eventId !== selectedEventId) return;
@@ -8467,6 +8646,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const tickets = ticketsSnap.val() || {};
                 const users = usersSnap.val() || {};
                 const events = eventsSnap.val() || {};
+                const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
                 
                 // Build rows - match vendor filtering logic
                 const rows = [];
@@ -8484,12 +8664,14 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         if (evOwner !== window.currentUserData?.uid) return;
                     }
                     
+                    const isUpgraded = window.isTicketReplacedByUpgrade(t, tkey, upgradeReplacementMap);
+                    const statusLabel = isUpgraded ? 'Di-upgrade' : ((t.status || '').toString().toUpperCase() === 'USED' ? 'Terpakai' : (t.status || 'Aktif'));
                     rows.push([
                         (t.code || '').replace(/"/g, '""'),
                         (user.nama || '').replace(/"/g, '""'),
                         (evt.title || '').replace(/"/g, '""'),
                         (t.category || '').replace(/"/g, '""'),
-                        t.used ? 'Terpakai' : 'Aktif',
+                        statusLabel,
                         new Date(t.createdAt || 0).toLocaleDateString('id-ID')
                     ]);
                 });
@@ -8550,6 +8732,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const payments = paymentsSnap.val() || {};
                 const users = usersSnap.val() || {};
                 const tickets = ticketsSnap.val() || {};
+                const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
                 
                 // Build report data
                 const reportData = [];
@@ -8571,7 +8754,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     let ticketCount = 0;
                     Object.keys(tickets).forEach(tkey => {
                         const t = tickets[tkey];
-                        if (t.uid === p.uid && t.eventId === eventId) ticketCount++;
+                        if (!t || window.isTicketReplacedByUpgrade(t, tkey, upgradeReplacementMap)) return;
+                        if (t.paymentId === pid) ticketCount++;
                     });
                     
                     reportData.push({

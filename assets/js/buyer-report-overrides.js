@@ -24,11 +24,12 @@
         const payments = paymentsSnap.val() || {};
         const users = usersSnap.val() || {};
         const events = eventsSnap.val() || {};
+        const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
         
         const grouped = {};
         Object.keys(tickets).forEach(tkey => {
             const t = tickets[tkey];
-            if (!t.uid || !t.eventId) return;
+            if (!t.uid || !t.eventId || window.isTicketReplacedByUpgrade(t, tkey, upgradeReplacementMap)) return;
             
             // Isolasi data untuk Vendor (EO hanya bisa melihat pembeli dari event miliknya sendiri)
             if (window.isVendor) {
