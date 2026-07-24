@@ -6,8 +6,8 @@
  * requests remain network-managed and are not intercepted by this worker.
  */
 
-const CACHE_PREFIX = 'btix-';
-const CACHE_NAME = 'btix-tiketkaka-v15-upgrade-retire-old-ticket';
+const CACHE_PREFIXES = ['btix-', 'tiketkaka-'];
+const CACHE_NAME = 'tiketkaka-v17-critical-repair';
 
 const APP_SHELL = [
   './',
@@ -39,7 +39,7 @@ self.addEventListener('activate', event => {
     caches.keys().then(keys =>
       Promise.all(
         keys
-          .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+          .filter(key => CACHE_PREFIXES.some(prefix => key.startsWith(prefix)) && key !== CACHE_NAME)
           .map(key => caches.delete(key))
       )
     ).then(() => self.clients.claim())
