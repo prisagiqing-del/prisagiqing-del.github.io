@@ -492,8 +492,11 @@
             Object.keys(window.appSponsors).forEach(k => {
                 const sp = window.appSponsors[k];
                 const spOwner = sp.ownerId || 'SUPER_ADMIN';
+                const sponsorName = (sp.name || '').toString().trim().toLowerCase();
+                const sponsorLogo = (sp.logo || '').toString();
+                const isLegacyBtixSponsor = sponsorName === 'btix' || sponsorName === 'btix.' || sponsorLogo.includes('Xkqq8E.png');
                 const sosmedLink = sp.sosmed ? `<a href="${sp.sosmed}" target="_blank" class="inline-block mt-1 text-amber-500 hover:text-amber-400 transition-colors text-xs"><i class="fa-solid fa-link"></i></a>` : '';
-                if (spOwner === 'SUPER_ADMIN') {
+                if (spOwner === 'SUPER_ADMIN' && !isLegacyBtixSponsor) {
                     if(pGrid) pGrid.innerHTML += `<div class="flex flex-col items-center gap-1"><img src="${sp.logo}" class="h-10 md:h-14 sponsor-logo">${sosmedLink}</div>`;
                 }
                 if (window.currentUserData) {
@@ -672,8 +675,8 @@
         window.sendPushNotification = function(title, options = {}) {
             if ('Notification' in window && Notification.permission === 'granted') {
                 new Notification(title, {
-                    icon: 'https://placehold.co/192x192',
-                    badge: 'https://placehold.co/72x72',
+                    icon: 'https://i.ibb.co.com/6RSLNkcR/tiketkaka.png',
+                    badge: 'https://i.ibb.co.com/6RSLNkcR/tiketkaka.png',
                     ...options
                 });
             }
@@ -2866,16 +2869,19 @@
             }
         };
 
+        window.DEFAULT_BRAND_LOGO_URL = 'https://i.ibb.co.com/6RSLNkcR/tiketkaka.png';
+
         window.normalizeBrandLogoUrl = function(value) {
             const url = (value || '').toString().trim();
-            if (!url) return '';
-            if (url.includes('Xkqq8E.png')) return '';
+            if (!url || url.includes('Xkqq8E.png') || url.includes('res.cloudinary.com/dygohchwp/image/upload/v178397')) {
+                return window.DEFAULT_BRAND_LOGO_URL;
+            }
             return url;
         };
 
         window.getDefaultFooterSettings = function() {
             return {
-                logo: '',
+                logo: 'https://i.ibb.co.com/6RSLNkcR/tiketkaka.png',
                 description: 'Platform tiket event terpercaya — temukan dan beli tiket konser, festival, olahraga, dan seminar dengan mudah dan aman.',
                 company: 'Dikelola oleh Mr.Bee Project',
                 privacy: `KEBIJAKAN PRIVASI BTIX
@@ -2983,7 +2989,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         window.renderFooterSettings = function(payload = {}, logos = {}) {
             const defaults = window.getDefaultFooterSettings();
             const footer = { ...defaults, ...(payload && typeof payload === 'object' ? payload : {}) };
-            const logoUrl = window.normalizeBrandLogoUrl(footer.logo) || window.normalizeBrandLogoUrl(logos.nav) || '';
+            const logoUrl = window.normalizeBrandLogoUrl(footer.logo || logos.nav);
             footer.logo = logoUrl;
             window.currentFooterSettings = footer;
 
@@ -3003,7 +3009,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             safeSetText('footer-company', footer.company || defaults.company);
             safeSetText('footer-year', String(new Date().getFullYear()));
 
-            safeSetValue('set-footer-logo', window.normalizeBrandLogoUrl(payload?.logo));
+            safeSetValue('set-footer-logo', window.normalizeBrandLogoUrl(payload?.logo || logos.nav));
             safeSetValue('set-footer-description', footer.description || defaults.description);
             safeSetValue('set-footer-company', footer.company || defaults.company);
             safeSetValue('set-footer-privacy', footer.privacy || defaults.privacy);

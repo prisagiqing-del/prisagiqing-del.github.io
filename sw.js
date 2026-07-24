@@ -7,7 +7,7 @@
  */
 
 const CACHE_PREFIX = 'btix-';
-const CACHE_NAME = 'btix-tiketkaka-v10-logo-banner-mobile';
+const CACHE_NAME = 'btix-tiketkaka-v11-logo-url-sponsor-clean';
 
 const APP_SHELL = [
   './',
