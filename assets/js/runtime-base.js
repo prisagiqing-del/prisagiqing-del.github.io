@@ -4163,10 +4163,30 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         };
 
         function loadUserDashboard(uid) {
-            db.ref('tickets').orderByChild('uid').equalTo(uid).on('value', snap => {
+            db.ref('tickets').orderByChild('uid').equalTo(uid).on('value', async snap => {
                 const c = document.getElementById('user-tickets-container'); if(!c) return;
                 c.innerHTML = ''; const data = snap.val() || {}; const allKeys = Object.keys(data);
-                const upgradeReplacementMap = window.getUpgradeReplacementMap(data);
+                const ticketUpgradeReplacementMap = window.getUpgradeReplacementMap(data);
+                let paymentUpgradeReplacementMap = {};
+                try {
+                    const paymentSnap = await db.ref('payments').orderByChild('uid').equalTo(uid).once('value');
+                    const paymentData = paymentSnap.val() || {};
+                    Object.entries(paymentData).forEach(([paymentId, payment]) => {
+                        if (!payment || (payment.type || '').toString().toUpperCase() !== 'UPGRADE') return;
+                        if ((payment.status || '').toString().toUpperCase() !== 'APPROVED') return;
+                        const originalCode = payment.replacedTicketCode || payment.ticketCode || payment.ticket_code || '';
+                        if (!originalCode) return;
+                        paymentUpgradeReplacementMap[originalCode] = {
+                            replacementCode: payment.upgradedTicketCode || '',
+                            targetCategory: payment.targetCategory || payment.category || '',
+                            upgradedAt: payment.approvedAt || payment.createdAt || null,
+                            upgradePaymentId: paymentId
+                        };
+                    });
+                } catch (upgradePaymentLookupError) {
+                    console.warn('[UPGRADE] Gagal membaca riwayat pembayaran upgrade:', upgradePaymentLookupError);
+                }
+                const upgradeReplacementMap = { ...paymentUpgradeReplacementMap, ...ticketUpgradeReplacementMap };
                 window.userUpgradeReplacementMap = upgradeReplacementMap;
                 window.userUpgradedTicketCodes = new Set(Object.keys(upgradeReplacementMap));
                 const transferredOldKeys = allKeys.filter(k => data[k]?.status === 'TRANSFERRED');
@@ -4181,8 +4201,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         })
                         .catch(cleanupError => console.warn('[TRANSFER] Tiket lama disembunyikan, tetapi belum dapat dibersihkan dari database:', cleanupError));
                 });
-                const keys = allKeys.filter(k => data[k]?.status !== 'TRANSFERRED' && !window.isTicketReplacedByUpgrade(data[k], k, upgradeReplacementMap));
-                if(keys.length === 0) { c.innerHTML = '<div class="col-span-full text-center py-10 text-gray-500 border border-dashed border-white/10 rounded-xl">Belum ada tiket aktif.</div>'; return; }
+                // Transferred originals are removed from the active list, while upgraded originals
+                // remain visible as a locked, non-clickable audit card.
+                const keys = allKeys.filter(k => data[k]?.status !== 'TRANSFERRED');
+                if(keys.length === 0) { c.innerHTML = '<div class="col-span-full text-center py-10 text-gray-500 border border-dashed border-white/10 rounded-xl">Belum ada tiket.</div>'; return; }
                 keys.reverse().forEach(k => {
                     const t = data[k]; const isSponsor = t.type === 'sponsor'; const isTerusan = (t.category || '').toLowerCase().includes('terusan');
                     const upgradeReplacement = upgradeReplacementMap[k] || null;
@@ -4202,7 +4224,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         let statusUi = '';
                         let adminMsgHtml = '';
                         let cardOverlayHtml = '';
-                        if (isUpgraded) { statusUi = `<span class="text-purple-300 font-bold bg-purple-500/10 px-2 py-1 rounded text-xs border border-purple-500/30">SUDAH DI-UPGRADE</span>`; }
+                        if (isUpgraded) {
+                            statusUi = `<span class="text-red-300 font-bold bg-red-500/10 px-2 py-1 rounded text-xs border border-red-500/40">DI-UPGRADE</span>`;
+                            cardOverlayHtml = `<div class="absolute inset-0 flex items-center justify-center pointer-events-none z-10"><div class="text-red-500 font-black text-3xl sm:text-4xl opacity-25 transform -rotate-12 tracking-widest whitespace-nowrap">SUDAH DI-UPGRADE</div></div>`;
+                        }
                         else if (isTransferred) { statusUi = `<span class="text-gray-400 font-bold text-xs">TRANSFER</span>`; }
                         else if (isTransferPending) { statusUi = `<span class="text-amber-400 font-bold text-xs">TRANSFER DIPROSES</span>`; }
                         else if (ticketEntry.status === 'SUSPENDED') {
@@ -4225,7 +4250,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         const isLegacySplit = ticketEntry.virtualSeatSplit === true;
                         let actionBtnHtml = '';
                         if (isUpgraded) {
-                            actionBtnHtml = `<button type="button" class="border border-purple-500/50 text-purple-300 px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-70" disabled><i class="fa-solid fa-arrow-up-right-dots mr-1"></i> UPGRADE</button>`;
+                            actionBtnHtml = `<button type="button" class="border border-red-500/50 text-red-300 px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-70" disabled aria-disabled="true"><i class="fa-solid fa-lock mr-1"></i> DI-UPGRADE</button>`;
                         } else if (ticketEntry.status === 'TRANSFERRED') {
                             actionBtnHtml = `<button type="button" class="border border-gray-600 text-gray-400 px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-70" disabled><i class="fa-solid fa-right-left mr-1"></i> TRANSFER</button>`;
                         } else if (ticketEntry.status === 'TRANSFER_PENDING') {
@@ -4238,16 +4263,16 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             actionBtnHtml = `<button type="button" onclick="viewTicket('${k}')" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">Lihat Tiket</button>`;
                         }
                         let transferredBadgeHtml = isTransferred ? `<div class="bg-gray-600 text-white font-bold px-3 py-1 text-xs rounded-full mb-2 inline-block"><i class="fa-solid fa-right-left mr-1"></i> TRANSFER</div>` : '';
-                        const upgradedBadgeHtml = isUpgraded ? `<div class="bg-purple-600 text-white font-bold px-3 py-1 text-xs rounded-full mb-2 inline-block"><i class="fa-solid fa-arrow-up-right-dots mr-1"></i> SUDAH DI-UPGRADE</div>` : '';
+                        const upgradedBadgeHtml = isUpgraded ? `<div class="bg-red-600/90 text-white font-bold px-3 py-1 text-xs rounded-full mb-2 inline-block border border-red-300/30"><i class="fa-solid fa-lock mr-1"></i> DI-UPGRADE</div>` : '';
                         let transferredToHtml = isTransferred ? `<p class="text-xs text-gray-400 mb-3"><i class="fa-solid fa-arrow-right text-orange-400 mr-1"></i>Telah dikirim ke: <span class="text-gray-300 font-semibold">${ticketEntry.transferredTo || 'unknown'}</span></p>` : '';
                         const upgradedToCode = ticketEntry.upgradedToTicketCode || upgradeReplacement?.replacementCode || '';
                         const upgradedToCategory = upgradeReplacement?.targetCategory || '';
-                        const upgradedInfoHtml = isUpgraded ? `<p class="text-xs text-purple-200 mb-3"><i class="fa-solid fa-circle-info mr-1"></i>Tiket lama tidak berlaku${upgradedToCategory ? `, telah diganti menjadi <span class="font-semibold">${upgradedToCategory}</span>` : ''}${upgradedToCode ? ` dengan kode <span class="font-mono font-semibold">${upgradedToCode}</span>` : ''}.</p>` : '';
-                        let cardOpacity = (isTransferred || isTransferPending || isUpgraded) ? 'opacity-60' : '';
+                        const upgradedInfoHtml = isUpgraded ? `<p class="text-xs text-red-200 mb-3"><i class="fa-solid fa-circle-info mr-1"></i>Tiket lama sudah dikunci dan tidak bisa dibuka, dipindai, ditransfer, atau di-upgrade lagi${upgradedToCategory ? `. Tiket pengganti: <span class="font-semibold">${upgradedToCategory}</span>` : ''}${upgradedToCode ? ` — <span class="font-mono font-semibold">${upgradedToCode}</span>` : ''}.</p>` : '';
+                        let cardOpacity = isUpgraded ? 'opacity-55 grayscale border-red-500/40 select-none' : ((isTransferred || isTransferPending) ? 'opacity-60' : '');
                         let seatInfo = ticketEntry.selectedTribun ? `<p class="text-xs text-gray-300 mb-2">Tribun: <span class="text-white font-semibold">${ticketEntry.selectedTribun}</span>${ticketEntry.selectedSeat ? ` • Kursi: <span class="text-white font-semibold">${ticketEntry.selectedSeat}</span>` : ''}</p>` : '';
                         const ticketCodeDisplay = ticketEntry.virtualSeatSplit ? (ticketEntry.virtualCode || ticketEntry.code) : ticketEntry.code;
                         const legacyNote = ticketEntry.virtualSeatSplit ? `<p class="text-xs text-emerald-300 mb-2">(Tiket virtual per kursi dari data lama, pemindaian/transfer berlaku pada kode asli ${ticketEntry.virtualParentCode})</p>` : '';
-                        c.innerHTML += `<div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden ${cardOpacity}">${cardOverlayHtml}<div class="absolute top-0 right-0 bg-amber-500 text-dark font-bold px-3 py-1 text-xs rounded-bl-lg">${ticketEntry.category} ${extraLabel}</div>${upgradedBadgeHtml}${transferredBadgeHtml}<h3 class="font-bold text-lg mb-1 pr-20">${ticketEntry.eventName}</h3><p class="text-xs text-gray-400 mb-1">Kode: <span class="text-white font-mono bg-dark/50 px-2 py-0.5 rounded">${ticketCodeDisplay}</span></p>${seatInfo}${legacyNote}${upgradedInfoHtml}${transferredToHtml}${adminMsgHtml}<div class="flex justify-between items-center gap-2 mt-4"><div>${statusUi}</div><div class="flex gap-2">${transferBtnHtml}${upgradeBtnHtml}${actionBtnHtml}</div></div></div>`;
+                        c.innerHTML += `<div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden ${cardOpacity}" ${isUpgraded ? 'aria-disabled="true" data-ticket-locked="upgrade"' : ''}>${cardOverlayHtml}<div class="absolute top-0 right-0 bg-amber-500 text-dark font-bold px-3 py-1 text-xs rounded-bl-lg">${ticketEntry.category} ${extraLabel}</div>${upgradedBadgeHtml}${transferredBadgeHtml}<h3 class="font-bold text-lg mb-1 pr-20">${ticketEntry.eventName}</h3><p class="text-xs text-gray-400 mb-1">Kode: <span class="text-white font-mono bg-dark/50 px-2 py-0.5 rounded">${ticketCodeDisplay}</span></p>${seatInfo}${legacyNote}${upgradedInfoHtml}${transferredToHtml}${adminMsgHtml}<div class="flex justify-between items-center gap-2 mt-4"><div>${statusUi}</div><div class="flex gap-2">${transferBtnHtml}${upgradeBtnHtml}${actionBtnHtml}</div></div></div>`;
                     });
                 });
             });
@@ -5617,7 +5642,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         upgradeUpdates[`payments/${key}/replacedTicketCode`] = ticketCode;
                         upgradeUpdates[`payments/${key}/upgradedTicketCode`] = newTicketCode;
                         upgradeUpdates[`payments/${key}/retiredTicketSnapshot`] = retiredOldTicket;
-                        upgradeUpdates[`tickets/${ticketCode}`] = null;
+                        // Keep the original ticket as a locked audit card. It is no longer ACTIVE,
+                        // cannot be opened/scanned/transferred/upgraded, and clearly points to the replacement.
+                        upgradeUpdates[`tickets/${ticketCode}`] = retiredOldTicket;
                         upgradeUpdates[`tickets/${newTicketCode}`] = cleanObject(upgradedTicket);
                         if (oldPaymentId && oldPaymentId !== key && (originalSelectedTribun || originalSelectedSeat)) {
                             if (originalSelectedTribun) upgradeUpdates[`payments/${oldPaymentId}/selectedTribun`] = null;
@@ -5625,7 +5652,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             upgradeUpdates[`payments/${oldPaymentId}/seatReleasedByUpgrade`] = true;
                         }
 
-                        // Pembayaran, penonaktifan tiket lama, dan pembuatan tiket upgrade diproses bersamaan.
+                        // Pembayaran, penguncian tiket lama, dan pembuatan tiket upgrade diproses bersamaan.
                         await db.ref().update(upgradeUpdates);
                         if (window.globalPaymentsData) {
                             window.globalPaymentsData[key] = {
@@ -5648,7 +5675,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         } catch (e) {}
                         await window.reconcileEventTicketCounts(evId);
                         window.refreshDashboardAfterDataMutation?.();
-                        Toast.fire({icon:'success', title:'Upgrade disetujui! Tiket lama dihapus dan tiket baru diterbitkan.'});
+                        Toast.fire({icon:'success', title:'Upgrade disetujui! Tiket lama dikunci dan tiket baru diterbitkan.'});
                     } else {
                         await db.ref(`payments/${key}`).update({status: 'APPROVED', approvedAt: firebase.database.ServerValue.TIMESTAMP});
                         if (window.globalPaymentsData) {
@@ -5792,7 +5819,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             } else if (isUpgradedTicket) {
                 playScanFeedback('error');
                 const replacementCodeText = tData.upgradedToTicketCode || discoveredUpgradeReplacement?.replacementCode || '';
-                resArea.innerHTML = `<div class="bg-purple-500/20 border-2 border-purple-500 text-purple-200 p-6 rounded-xl text-center shadow-[0_0_20px_rgba(168,85,247,0.25)]"><i class="fa-solid fa-arrow-up-right-dots text-5xl mb-3"></i><br><b class="text-3xl tracking-wider">TIKET SUDAH DI-UPGRADE</b><br><div class="mt-4 text-sm text-purple-100 bg-purple-950/50 p-3 rounded text-left"><p>Tiket lama ini sudah tidak berlaku dan tidak dapat digunakan untuk masuk.</p>${replacementCodeText ? `<p class="mt-2"><b>Kode tiket pengganti:</b> ${replacementCodeText}</p>` : ''}</div></div>`;
+                resArea.innerHTML = `<div class="bg-red-500/20 border-2 border-red-500 text-red-200 p-6 rounded-xl text-center shadow-[0_0_20px_rgba(239,68,68,0.25)]"><i class="fa-solid fa-arrow-up-right-dots text-5xl mb-3"></i><br><b class="text-3xl tracking-wider">TIKET DI-UPGRADE</b><br><div class="mt-4 text-sm text-red-100 bg-red-950/50 p-3 rounded text-left"><p>Tiket lama ini sudah tidak berlaku dan tidak dapat digunakan untuk masuk.</p>${replacementCodeText ? `<p class="mt-2"><b>Kode tiket pengganti:</b> ${replacementCodeText}</p>` : ''}</div></div>`;
                 window.scanTimeoutId = setTimeout(() => { window.isProcessingScan = false; }, 1500);
                 return;
             } else if (tData.status === 'TRANSFER_PENDING') {
