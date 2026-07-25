@@ -2818,7 +2818,7 @@
                                 window.currentUserData = data;
                                 window.currentUserData.uid = user.uid;
                                 window.usersMapCache[user.uid] = window.currentUserData;
-                                loadUserDashboard(user.uid);
+                                if (window.__userDashboardUid !== user.uid) loadUserDashboard(user.uid);
                             };
                             userRef.on('value', window.__userProfileListenerRef);
 
@@ -2828,7 +2828,7 @@
                             window.currentUserData.uid = user.uid;
                             window.usersMapCache[user.uid] = window.currentUserData;
 
-                            loadUserDashboard(user.uid);
+                            if (window.__userDashboardUid !== user.uid) loadUserDashboard(user.uid);
 
                             if(nlBtn) nlBtn.classList.add('hidden'); if(nrBtn) nrBtn.classList.add('hidden'); if(nloBtn) nloBtn.classList.remove('hidden');
                             if(nUserG) { nUserG.classList.remove('hidden'); nUserG.innerHTML = `Halo, <span class="font-bold text-white">${(data.nama || 'User').split(' ')[0]}</span>`; }
@@ -2933,6 +2933,7 @@
 
                         } catch(e) { console.error(e); }
                     } else {
+                        window.detachUserDashboardListeners?.();
                         window.currentUserData = null; window.isSuperAdmin = false; window.isVendor = false; window.isScanner = false;
                         if (window.__userProfileListenerRef && auth?.currentUser) {
                             try { db.ref('users/' + auth.currentUser.uid).off('value', window.__userProfileListenerRef); } catch (e) {}
@@ -4397,10 +4398,34 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             return groups;
         };
 
+        window.detachUserDashboardListeners = function() {
+            try {
+                if (window.__userDashboardTicketQuery) window.__userDashboardTicketQuery.off('value');
+            } catch (e) { console.warn('[USER DASHBOARD] Gagal melepas listener tiket:', e); }
+            try {
+                if (window.__userDashboardPaymentQuery) window.__userDashboardPaymentQuery.off('value');
+            } catch (e) { console.warn('[USER DASHBOARD] Gagal melepas listener pembayaran:', e); }
+            window.__userDashboardTicketQuery = null;
+            window.__userDashboardPaymentQuery = null;
+            window.__userDashboardUid = null;
+            window.__userDashboardGeneration = (window.__userDashboardGeneration || 0) + 1;
+            window.__userTicketRenderToken = (window.__userTicketRenderToken || 0) + 1;
+        };
+
         function loadUserDashboard(uid) {
-            db.ref('tickets').orderByChild('uid').equalTo(uid).on('value', async snap => {
+            if (!uid || !db) return;
+            if (window.__userDashboardUid === uid && window.__userDashboardTicketQuery && window.__userDashboardPaymentQuery) return;
+            window.detachUserDashboardListeners();
+            window.__userDashboardUid = uid;
+            const dashboardGeneration = window.__userDashboardGeneration;
+
+            const ticketQuery = db.ref('tickets').orderByChild('uid').equalTo(uid);
+            window.__userDashboardTicketQuery = ticketQuery;
+            ticketQuery.on('value', async snap => {
                 const c = document.getElementById('user-tickets-container'); if(!c) return;
-                c.innerHTML = ''; const data = snap.val() || {}; const allKeys = Object.keys(data);
+                const renderToken = (window.__userTicketRenderToken || 0) + 1;
+                window.__userTicketRenderToken = renderToken;
+                const data = snap.val() || {}; const allKeys = Object.keys(data);
                 const ticketUpgradeReplacementMap = window.getUpgradeReplacementMap(data);
                 let paymentUpgradeReplacementMap = {};
                 let userPaymentsForTicketDisplay = {};
@@ -4423,6 +4448,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 } catch (upgradePaymentLookupError) {
                     console.warn('[UPGRADE] Gagal membaca riwayat pembayaran upgrade:', upgradePaymentLookupError);
                 }
+                if (dashboardGeneration !== window.__userDashboardGeneration || window.__userDashboardUid !== uid || renderToken !== window.__userTicketRenderToken) return;
+                c.innerHTML = '';
                 const upgradeReplacementMap = { ...paymentUpgradeReplacementMap, ...ticketUpgradeReplacementMap };
                 window.userUpgradeReplacementMap = upgradeReplacementMap;
                 window.userUpgradedTicketCodes = new Set(Object.keys(upgradeReplacementMap));
@@ -4515,7 +4542,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 });
             });
 
-            db.ref('payments').orderByChild('uid').equalTo(uid).on('value', snap => {
+            const paymentQuery = db.ref('payments').orderByChild('uid').equalTo(uid);
+            window.__userDashboardPaymentQuery = paymentQuery;
+            paymentQuery.on('value', snap => {
+                if (dashboardGeneration !== window.__userDashboardGeneration || window.__userDashboardUid !== uid) return;
                 const ht = document.getElementById('user-history-container');
                 const pt = document.getElementById('user-pending-container');
                 const pSec = document.getElementById('user-pending-section');
@@ -5728,7 +5758,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             });
             if (Object.keys(updates).length) await db.ref().update(updates);
             Toast.fire({ icon: 'success', title: 'Total deposit sudah 100%, tiket otomatis diterbitkan!' });
-            if (typeof window.loadUserDashboard === 'function') window.loadUserDashboard(userId);
+            // Listener dashboard aktif akan menerima perubahan tiket otomatis; jangan memasang listener kedua.
         }
 
         window.tryConvertApprovedDepositPayment = tryConvertApprovedDepositPayment;
