@@ -2995,7 +2995,7 @@ Jadwal, lokasi, kategori, kuota, harga, tata tertib, dan ketentuan khusus event 
 Pembayaran dilakukan melalui metode manual yang ditampilkan pada platform. Pesanan belum dianggap selesai sebelum pembayaran diverifikasi dan disetujui oleh Admin atau Vendor yang berwenang. Pengguna wajib mengirim bukti pembayaran yang benar dan sesuai dengan transaksi.
 
 5. Transfer Tiket
-Tiket berstatus ACTIVE dapat ditransfer oleh pemiliknya kepada penerima yang telah memiliki akun Tiket Kaka. Setelah transfer berhasil, tiket lama tetap tercatat sebagai riwayat dengan status TRANSFERRED dan tidak dapat digunakan, dibuka sebagai tiket aktif, dipindai, atau ditransfer kembali. Penerima memperoleh tiket baru berstatus ACTIVE. Pengguna bertanggung jawab memastikan email penerima benar sebelum mengonfirmasi transfer.
+Tiket berstatus ACTIVE dapat ditransfer oleh pemiliknya kepada penerima yang telah memiliki akun Tiket Kaka. Setelah transfer berhasil, tiket lama dihapus dari daftar tiket aktif dan tidak dapat digunakan, dibuka, dipindai, atau ditransfer kembali. Riwayat transfer tetap disimpan terpisah untuk audit, sedangkan penerima memperoleh tiket baru berstatus ACTIVE. Pengguna bertanggung jawab memastikan email penerima benar sebelum mengonfirmasi transfer.
 
 6. Penggunaan dan Pemindaian Tiket
 QR Code, barcode, dan kode tiket bersifat unik. Pengguna dilarang menggandakan, menjual secara melawan hukum, mengubah, atau membagikan kode tiket kepada pihak yang tidak berhak. Tiket yang telah digunakan, ditangguhkan, dibatalkan, atau ditransfer akan ditolak oleh sistem scanner sesuai statusnya.
@@ -4169,7 +4169,19 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const upgradeReplacementMap = window.getUpgradeReplacementMap(data);
                 window.userUpgradeReplacementMap = upgradeReplacementMap;
                 window.userUpgradedTicketCodes = new Set(Object.keys(upgradeReplacementMap));
-                const keys = allKeys.filter(k => !window.isTicketReplacedByUpgrade(data[k], k, upgradeReplacementMap));
+                const transferredOldKeys = allKeys.filter(k => data[k]?.status === 'TRANSFERRED');
+                transferredOldKeys.forEach(ticketCode => {
+                    db.ref(`ticketTransfers/${ticketCode}`).once('value')
+                        .then(operationSnap => {
+                            const operation = operationSnap.val();
+                            if (operation?.status === 'COMPLETED' && operation.fromUid === uid) {
+                                return db.ref(`tickets/${ticketCode}`).remove();
+                            }
+                            return null;
+                        })
+                        .catch(cleanupError => console.warn('[TRANSFER] Tiket lama disembunyikan, tetapi belum dapat dibersihkan dari database:', cleanupError));
+                });
+                const keys = allKeys.filter(k => data[k]?.status !== 'TRANSFERRED' && !window.isTicketReplacedByUpgrade(data[k], k, upgradeReplacementMap));
                 if(keys.length === 0) { c.innerHTML = '<div class="col-span-full text-center py-10 text-gray-500 border border-dashed border-white/10 rounded-xl">Belum ada tiket aktif.</div>'; return; }
                 keys.reverse().forEach(k => {
                     const t = data[k]; const isSponsor = t.type === 'sponsor'; const isTerusan = (t.category || '').toLowerCase().includes('terusan');
@@ -6418,7 +6430,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 Swal.fire({
                     icon: 'success',
                     title: 'Transfer Berhasil!',
-                    html: `<p class="text-sm mb-2">Tiket aktif sudah dipindahkan ke:</p><p class="font-bold text-green-400">${escapeHtml(recipientName)}<br>${escapeHtml(recipientEmail)}</p><p class="text-xs text-gray-400 mt-3">Tiket lama berstatus <b>TRANSFER</b> dan tidak dapat digunakan.<br>Kode tiket baru: <b class="text-amber-500">${escapeHtml(newTicketCode)}</b></p>`,
+                    html: `<p class="text-sm mb-2">Tiket aktif sudah dipindahkan ke:</p><p class="font-bold text-green-400">${escapeHtml(recipientName)}<br>${escapeHtml(recipientEmail)}</p><p class="text-xs text-gray-400 mt-3">Tiket lama telah dihapus dari daftar tiket dan tidak dapat digunakan lagi.<br>Kode tiket baru: <b class="text-amber-500">${escapeHtml(newTicketCode)}</b></p>`,
                     background: '#1e293b',
                     color: '#fff',
                     confirmButtonColor: '#f59e0b'
@@ -6509,7 +6521,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     existingOperation = (await operationRef.once('value')).val();
                 } catch (readOperationError) {
                     if (readOperationError?.code === 'PERMISSION_DENIED' || /permission_denied/i.test(readOperationError?.message || '')) {
-                        throw new Error('Firebase Rules transfer belum diperbarui. Pasang database rules v17 terlebih dahulu.');
+                        throw new Error('Firebase Rules transfer belum diperbarui. Pasang database rules v18 terlebih dahulu.');
                     }
                     throw readOperationError;
                 }
@@ -6528,7 +6540,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             if (existingOperation.status !== 'COMPLETED') {
                                 await operationRef.update({status:'COMPLETED', completedAt: transferTimestamp});
                             }
-                        } catch (e) {}
+                            await ticketRef.remove();
+                        } catch (cleanupError) {
+                            console.warn('[TRANSFER] Transfer selesai, tetapi tiket lama belum terhapus otomatis:', cleanupError);
+                        }
                         showSuccess(existingOperation.toUserName || recipientName, existingOperation.toEmail || recipientEmail, existingNewCode);
                         return;
                     }
@@ -6564,7 +6579,12 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         transferStage = 'menyelesaikan transfer sebelumnya';
                         await ticketRef.update({status:'TRANSFERRED'});
                         originalTicketFinalized = true;
-                        try { await operationRef.update({status:'COMPLETED', completedAt: transferTimestamp}); } catch (e) {}
+                        try {
+                            await operationRef.update({status:'COMPLETED', completedAt: transferTimestamp});
+                            await ticketRef.remove();
+                        } catch (cleanupError) {
+                            console.warn('[TRANSFER] Transfer selesai, tetapi tiket lama belum terhapus otomatis:', cleanupError);
+                        }
                         showSuccess(recipientName, recipientEmail, existingNewCode);
                         return;
                     } else if (latestOld.status === 'TRANSFER_PENDING' && !stagedTicket) {
@@ -6686,7 +6706,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
                 transferStage = 'menyimpan riwayat transfer';
                 try {
-                    const transferHistoryRef = db.ref('transferHistory').push();
+                    const transferHistoryRef = db.ref(`transferHistory/${ticketCode}`);
                     await transferHistoryRef.set(cleanObject({
                         fromUid: originalTicket.uid,
                         fromEmail: currentUser.email || '',
@@ -6702,7 +6722,15 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         transferredAt: transferTimestamp
                     }));
                 } catch (historyError) {
-                    console.warn('[TRANSFER] Riwayat tidak tersimpan, tiket tetap berhasil dipindahkan:', historyError);
+                    console.warn('[TRANSFER] Riwayat tidak tersimpan, data operasi transfer tetap tersedia:', historyError);
+                }
+
+                transferStage = 'menghapus tiket lama dari daftar';
+                try {
+                    await ticketRef.remove();
+                } catch (removeOldError) {
+                    // Tiket TRANSFERRED tetap disembunyikan dari UI. Pembersihan akan dicoba lagi saat dashboard dimuat.
+                    console.warn('[TRANSFER] Tiket lama belum terhapus otomatis; akan dibersihkan saat dashboard dimuat:', removeOldError);
                 }
 
                 showSuccess(recipientName, recipientEmail, newTicketCode);
@@ -6747,7 +6775,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
 
                 const permissionMessage = (err?.code === 'PERMISSION_DENIED' || /permission_denied/i.test(err?.message || ''))
-                    ? 'Firebase Rules belum sesuai. Pasang file Database Rules v17 lalu Publish.'
+                    ? 'Firebase Rules belum sesuai. Pasang file Database Rules v18 lalu Publish.'
                     : (err.message || 'Terjadi kesalahan saat memproses transfer tiket.');
                 Swal.fire({
                     icon: 'error',
