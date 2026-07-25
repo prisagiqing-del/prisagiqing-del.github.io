@@ -2812,9 +2812,6 @@
                 }, 5000);
 
                 auth.onAuthStateChanged(async (user) => {
-                    const loader = document.getElementById('loading-overlay');
-                    if (loader) { loader.style.display = 'none'; } 
-                    
                     const lastPage = localStorage.getItem('beetix_last_page') || 'home';
                     if (lastPage !== 'home') { showPage(lastPage, true); }
 
@@ -2962,6 +2959,7 @@
                         if(nUserG) nUserG.classList.add('hidden');
                         if(nAdminBtn) nAdminBtn.classList.add('hidden'); if(nScanBtn) nScanBtn.classList.add('hidden'); if(nUserBtn) nUserBtn.classList.add('hidden');
                     }
+                    window.TiketKakaSplash?.markReady('auth');
                 });
             }
         }, 100);
@@ -3586,8 +3584,12 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         safeSetValue(`bn-url-${i+1}`, urlStr);
                     }
                 }
+                window.TiketKakaSplash?.markReady('settings');
                 
-            }, err => { console.error("Gagal memuat setting:", err); });
+            }, err => {
+                console.error("Gagal memuat setting:", err);
+                window.TiketKakaSplash?.markReady('settings');
+            });
         }// Make it globally accessible so deposit loading can trigger it
         window.listenToPublicEvents = function listenToPublicEvents() {
             if (window.publicEventsListening) return;
@@ -3721,10 +3723,16 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 };
 
                 processEvents();
+                window.TiketKakaSplash?.markReady('events');
                 if (window.currentUserData === null) {
                     let retryCount = 0; let waitInterval = setInterval(() => { if (window.currentUserData !== null || retryCount > 10) { clearInterval(waitInterval); if(pubC) pubC.innerHTML = ''; processEvents(); } retryCount++; }, 100);
                 }
-            }, err => { console.error("Gagal memuat event:", err); });
+            }, err => {
+                console.error("Gagal memuat event:", err);
+                const pubC = document.getElementById('events-container');
+                if (pubC) pubC.innerHTML = '<div class="w-full text-center text-red-300 py-10 border border-dashed border-red-400/30 rounded-xl">Event belum dapat dimuat. Silakan periksa koneksi dan muat ulang halaman.</div>';
+                window.TiketKakaSplash?.markReady('events');
+            });
         }
 
         async function getTicketDeletionRequestsData() {
