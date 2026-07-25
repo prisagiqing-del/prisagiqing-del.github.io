@@ -286,12 +286,81 @@
         window.__ticketCreationLock = false;
         window.__ticketPruneLock = false;
 
+        window.getExpectedTicketQuantity = function(paymentData) {
+            return Math.max(1, parseInt(paymentData?.qty || '1', 10) || 1);
+        };
+
+        window.isTicketLifecycleArtifact = function(ticket) {
+            if (!ticket) return false;
+            const status = (ticket.status || '').toString().toUpperCase();
+            return Boolean(
+                ticket.transferredFrom ||
+                ticket.transferOperationId ||
+                ticket.replacedByUpgrade ||
+                ticket.upgradedFrom ||
+                ticket.upgradedToTicketCode ||
+                ticket.invalidatedReason === 'UPGRADE' ||
+                status === 'TRANSFER_PENDING' ||
+                status === 'TRANSFERRED'
+            );
+        };
+
+        window.sortPaymentTicketEntries = function(entries) {
+            const statusPriority = { USED: 0, ACTIVE: 1, SUSPENDED: 2 };
+            return [...(entries || [])].sort((a, b) => {
+                const aSlot = Number.isInteger(a?.ticket?.issueSlot) ? a.ticket.issueSlot : Number.MAX_SAFE_INTEGER;
+                const bSlot = Number.isInteger(b?.ticket?.issueSlot) ? b.ticket.issueSlot : Number.MAX_SAFE_INTEGER;
+                if (aSlot !== bSlot) return aSlot - bSlot;
+                const aStatus = statusPriority[(a?.ticket?.status || '').toString().toUpperCase()] ?? 9;
+                const bStatus = statusPriority[(b?.ticket?.status || '').toString().toUpperCase()] ?? 9;
+                if (aStatus !== bStatus) return aStatus - bStatus;
+                const aTime = Number(a?.ticket?.createdAt || 0);
+                const bTime = Number(b?.ticket?.createdAt || 0);
+                if (aTime !== bTime) return aTime - bTime;
+                return String(a?.ticketKey || '').localeCompare(String(b?.ticketKey || ''));
+            });
+        };
+
+        window.getCanonicalPaymentTicketEntries = function(entries, expectedQty) {
+            const purchaseEntries = (entries || []).filter(entry => !window.isTicketLifecycleArtifact(entry.ticket));
+            return window.sortPaymentTicketEntries(purchaseEntries).slice(0, Math.max(1, expectedQty || 1));
+        };
+
+        window.buildDeterministicTicketCode = async function(paymentKey, issueSlot, ownerId, eventId, salt = 0) {
+            const seed = `${paymentKey}|${issueSlot}|${ownerId || ''}|${eventId || ''}|${salt}|TIKETKAKA-V21`;
+            let hex = '';
+            try {
+                if (globalThis.crypto?.subtle && globalThis.TextEncoder) {
+                    const bytes = new TextEncoder().encode(seed);
+                    const digest = await crypto.subtle.digest('SHA-256', bytes);
+                    hex = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
+                }
+            } catch (e) {
+                console.warn('[TICKET ISSUE] SHA-256 fallback digunakan.', e);
+            }
+            if (!hex) {
+                let h1 = 2166136261;
+                let h2 = 2246822519;
+                for (let i = 0; i < seed.length; i++) {
+                    const code = seed.charCodeAt(i);
+                    h1 ^= code; h1 = Math.imul(h1, 16777619);
+                    h2 ^= code; h2 = Math.imul(h2, 3266489917);
+                }
+                hex = `${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`.toUpperCase();
+            }
+            return `TK-${hex.slice(0, 8)}-${hex.slice(8, 16)}-${String(issueSlot + 1).padStart(2, '0')}`;
+        };
+
         window.countTicketsForPayment = async function(paymentKey) {
             if (!paymentKey) return 0;
             try {
-                const ticketSnap = await db.ref('tickets').orderByChild('paymentId').equalTo(paymentKey).once('value');
-                const tickets = ticketSnap.val() || {};
-                return Object.keys(tickets).length;
+                const [paymentSnap, ticketSnap] = await Promise.all([
+                    db.ref(`payments/${paymentKey}`).once('value'),
+                    db.ref('tickets').orderByChild('paymentId').equalTo(paymentKey).once('value')
+                ]);
+                const expectedQty = window.getExpectedTicketQuantity(paymentSnap.val() || {});
+                const entries = Object.entries(ticketSnap.val() || {}).map(([ticketKey, ticket]) => ({ ticketKey, ticket }));
+                return window.getCanonicalPaymentTicketEntries(entries, expectedQty).length;
             } catch (e) {
                 console.error('[countTicketsForPayment]', e);
                 return 0;
@@ -299,7 +368,7 @@
         };
 
         window.pruneOverGeneratedTicketsForPayments = async function() {
-            if (!db || window.__ticketPruneLock) return;
+            if (!db || window.__ticketPruneLock || (!window.isSuperAdmin && !window.isVendor)) return;
             window.__ticketPruneLock = true;
             try {
                 const [paymentsSnap, ticketsSnap] = await Promise.all([
@@ -316,22 +385,32 @@
                 });
 
                 const removeTasks = [];
+                const paymentUpdates = {};
+                const affectedEvents = new Set();
                 Object.entries(payments).forEach(([paymentKey, payment]) => {
                     if (!payment || (payment.status || '').toString().toUpperCase() !== 'APPROVED') return;
                     const paymentType = (payment.type || '').toString().toUpperCase();
                     if (paymentType === 'DEPOSIT' || paymentType === 'UPGRADE') return;
-                    const expectedQty = Math.max(1, parseInt(payment.qty || '1', 10) || 1);
-                    const entries = ticketsByPayment[paymentKey] || [];
-                    if (entries.length <= expectedQty) return;
-                    const toRemove = entries.slice(expectedQty);
-                    toRemove.forEach(({ ticketKey }) => {
+                    if (window.isVendor && (payment.ownerId || 'SUPER_ADMIN') !== window.currentUserData?.uid) return;
+
+                    const expectedQty = window.getExpectedTicketQuantity(payment);
+                    const allEntries = ticketsByPayment[paymentKey] || [];
+                    const purchaseEntries = allEntries.filter(entry => !window.isTicketLifecycleArtifact(entry.ticket));
+                    const canonicalEntries = window.getCanonicalPaymentTicketEntries(purchaseEntries, expectedQty);
+                    const keepKeys = new Set(canonicalEntries.map(entry => entry.ticketKey));
+                    const extras = purchaseEntries.filter(entry => !keepKeys.has(entry.ticketKey));
+                    extras.forEach(({ ticketKey, ticket }) => {
                         removeTasks.push(db.ref(`tickets/${ticketKey}`).remove());
+                        if (ticket?.eventId) affectedEvents.add(ticket.eventId);
                     });
+                    paymentUpdates[`payments/${paymentKey}/ticketIssuedQty`] = canonicalEntries.length;
+                    paymentUpdates[`payments/${paymentKey}/ticketCodes`] = canonicalEntries.map(entry => entry.ticketKey).join(',');
+                    paymentUpdates[`payments/${paymentKey}/issuanceVersion`] = 'v21';
                 });
-                if (removeTasks.length) {
-                    await Promise.all(removeTasks);
-                    window.refreshDashboardAfterDataMutation?.();
-                }
+                if (removeTasks.length) await Promise.all(removeTasks);
+                if (Object.keys(paymentUpdates).length) await db.ref().update(paymentUpdates);
+                for (const eventId of affectedEvents) await window.reconcileEventTicketCounts?.(eventId);
+                if (removeTasks.length) window.refreshDashboardAfterDataMutation?.();
             } catch (e) {
                 console.warn('pruneOverGeneratedTicketsForPayments failed', e);
             } finally {
@@ -340,24 +419,28 @@
         };
 
         window.ensureTicketsForPayment = async function(paymentKey, paymentData) {
-            if (!db || !paymentKey || !paymentData) return { created: 0, existing: 0 };
+            if (!db || !paymentKey || !paymentData) return { created: 0, existing: 0, createdCodes: [] };
             const paymentType = (paymentData.type || '').toString().toUpperCase();
-            if (paymentType === 'DEPOSIT' || paymentType === 'UPGRADE') return { created: 0, existing: 0 };
+            if (paymentType === 'DEPOSIT' || paymentType === 'UPGRADE') return { created: 0, existing: 0, createdCodes: [] };
 
-            const expectedQty = Math.max(1, parseInt(paymentData.qty || '1', 10) || 1);
+            const expectedQty = window.getExpectedTicketQuantity(paymentData);
             const ticketSnap = await db.ref('tickets').orderByChild('paymentId').equalTo(paymentKey).once('value');
-            const currentTickets = ticketSnap.val() || {};
-            const existingCount = Object.keys(currentTickets).length;
-
-            if (existingCount >= expectedQty) {
-                if (existingCount > expectedQty) {
-                    const toRemove = Object.keys(currentTickets).slice(expectedQty);
-                    await Promise.all(toRemove.map(ticketKey => db.ref(`tickets/${ticketKey}`).remove()));
-                }
-                return { created: 0, existing: existingCount };
+            const allEntries = Object.entries(ticketSnap.val() || {}).map(([ticketKey, ticket]) => ({ ticketKey, ticket }));
+            const purchaseEntries = allEntries.filter(entry => !window.isTicketLifecycleArtifact(entry.ticket));
+            const sortedEntries = window.sortPaymentTicketEntries(purchaseEntries);
+            const canonicalEntries = sortedEntries.slice(0, expectedQty);
+            const canonicalKeys = new Set(canonicalEntries.map(entry => entry.ticketKey));
+            const duplicateEntries = sortedEntries.filter(entry => !canonicalKeys.has(entry.ticketKey));
+            if (duplicateEntries.length && (window.isSuperAdmin || window.isVendor)) {
+                await Promise.all(duplicateEntries.map(entry => db.ref(`tickets/${entry.ticketKey}`).remove()));
             }
 
-            const missingQty = expectedQty - existingCount;
+            const occupiedSlots = new Set();
+            canonicalEntries.forEach((entry, index) => {
+                const slot = Number.isInteger(entry.ticket?.issueSlot) ? entry.ticket.issueSlot : index;
+                if (slot >= 0 && slot < expectedQty) occupiedSlots.add(slot);
+            });
+
             const evId = paymentData.eventId;
             const eventData = window.eventDataMap?.[evId] || {};
             const category = paymentData.category || '';
@@ -365,68 +448,217 @@
             const isTerusan = (category || '').toLowerCase().includes('terusan');
             let seasonScanQuota = 0;
             if (isTerusan && eventData.tiket) {
-                seasonScanQuota = category === 'Terusan Ekonomi' ? parseInt(eventData.tiket.trs_eco_scan) || 0 : parseInt(eventData.tiket.trs_vip_scan) || 0;
+                seasonScanQuota = category.toLowerCase().includes('ekonomi') ? parseInt(eventData.tiket.trs_eco_scan) || 0 : parseInt(eventData.tiket.trs_vip_scan) || 0;
             }
             const seatValues = (paymentData.selectedSeat || '').toString().split(/\s*,\s*/).filter(Boolean);
+            let serverOffset = 0;
+            try {
+                const offsetSnap = await db.ref('.info/serverTimeOffset').once('value');
+                serverOffset = Number(offsetSnap.val() || 0);
+            } catch (e) {}
             const createdCodes = [];
 
-            for (let i = 0; i < missingQty; i++) {
-                const tcode = await window.generateSecureTicketCode(ownerId, evId, eventData);
-                const raffleNumber = eventData.raffle_enabled ? await window.reserveRaffleNumber(evId) : null;
-                let tixPayload = {
-                    code: tcode,
-                    paymentId: paymentKey,
-                    uid: paymentData.uid,
-                    userName: paymentData.userName,
-                    eventId: evId,
-                    eventName: paymentData.eventName,
-                    category: category,
-                    status: 'ACTIVE',
-                    ownerId: ownerId,
-                    createdAt: firebase.database.ServerValue.TIMESTAMP
-                };
-                if (raffleNumber !== null && typeof raffleNumber !== 'undefined') {
-                    tixPayload.raffle_number = raffleNumber;
+            for (let issueSlot = 0; issueSlot < expectedQty; issueSlot++) {
+                if (occupiedSlots.has(issueSlot)) continue;
+                let committedCode = '';
+                for (let salt = 0; salt < 5 && !committedCode; salt++) {
+                    const tcode = await window.buildDeterministicTicketCode(paymentKey, issueSlot, ownerId, evId, salt);
+                    let tixPayload = {
+                        code: tcode,
+                        paymentId: paymentKey,
+                        issueSlot,
+                        issuanceVersion: 'v21',
+                        paymentQty: expectedQty,
+                        uid: paymentData.uid,
+                        userName: paymentData.userName,
+                        eventId: evId,
+                        eventName: paymentData.eventName,
+                        category,
+                        status: 'ACTIVE',
+                        ownerId,
+                        createdAt: Date.now() + serverOffset
+                    };
+                    if (isTerusan) {
+                        tixPayload.type = 'terusan';
+                        tixPayload.quota = seasonScanQuota;
+                        tixPayload.remaining = seasonScanQuota;
+                    }
+                    if (paymentData.selectedTribun !== undefined && paymentData.selectedTribun !== null) tixPayload.selectedTribun = paymentData.selectedTribun;
+                    if (seatValues.length) tixPayload.selectedSeat = seatValues[issueSlot] || seatValues[seatValues.length - 1];
+                    else if (paymentData.selectedSeat !== undefined && paymentData.selectedSeat !== null) tixPayload.selectedSeat = paymentData.selectedSeat;
+                    if (paymentData.customFormAnswers) tixPayload.customFormAnswers = paymentData.customFormAnswers;
+                    tixPayload = cleanObject(tixPayload);
+
+                    let ticketAlreadyExisted = false;
+                    const result = await db.ref(`tickets/${tcode}`).transaction(current => {
+                        if (!current) return tixPayload;
+                        if (current.paymentId === paymentKey && Number(current.issueSlot) === issueSlot) {
+                            ticketAlreadyExisted = true;
+                            return current;
+                        }
+                        return;
+                    }, undefined, false);
+                    const resolved = result?.snapshot?.val();
+                    if (resolved?.paymentId === paymentKey && Number(resolved.issueSlot) === issueSlot) {
+                        committedCode = tcode;
+                        if (result.committed && !ticketAlreadyExisted) {
+                            createdCodes.push(tcode);
+                            if (eventData.raffle_enabled && resolved.raffle_number === undefined) {
+                                const raffleNumber = await window.reserveRaffleNumber(evId);
+                                if (raffleNumber !== null && raffleNumber !== undefined) {
+                                    await db.ref(`tickets/${tcode}/raffle_number`).set(raffleNumber);
+                                }
+                            }
+                        }
+                    }
                 }
-                if (isTerusan) {
-                    tixPayload.type = 'terusan';
-                    tixPayload.quota = seasonScanQuota;
-                    tixPayload.remaining = seasonScanQuota;
-                }
-                if (paymentData.selectedTribun !== undefined && paymentData.selectedTribun !== null) {
-                    tixPayload.selectedTribun = paymentData.selectedTribun;
-                }
-                if (seatValues.length) {
-                    tixPayload.selectedSeat = seatValues[i] || seatValues[seatValues.length - 1];
-                } else if (paymentData.selectedSeat !== undefined && paymentData.selectedSeat !== null) {
-                    tixPayload.selectedSeat = paymentData.selectedSeat;
-                }
-                if (paymentData.customFormAnswers) {
-                    tixPayload.customFormAnswers = paymentData.customFormAnswers;
-                }
-                await db.ref(`tickets/${tcode}`).set(cleanObject(tixPayload));
-                createdCodes.push(tcode);
+                if (!committedCode) throw new Error(`Gagal menerbitkan tiket slot ${issueSlot + 1} secara aman.`);
             }
 
-            if (evId) {
-                await db.ref(`events/${evId}/sold`).transaction(c => (c || 0) + missingQty);
-                const catKey = window.getEventCategorySoldKey(category);
-                if (catKey) {
-                    await db.ref(`events/${evId}/tiket/${catKey}`).transaction(c => (c || 0) + missingQty);
+            const finalSnap = await db.ref('tickets').orderByChild('paymentId').equalTo(paymentKey).once('value');
+            const finalEntries = Object.entries(finalSnap.val() || {}).map(([ticketKey, ticket]) => ({ ticketKey, ticket }));
+            const finalCanonical = window.getCanonicalPaymentTicketEntries(finalEntries, expectedQty);
+            await db.ref(`payments/${paymentKey}`).update({
+                ticketIssuedQty: finalCanonical.length,
+                ticketCodes: finalCanonical.map(entry => entry.ticketKey).join(','),
+                issuanceVersion: 'v21',
+                ticketCreatedAt: firebase.database.ServerValue.TIMESTAMP
+            });
+            return { created: createdCodes.length, existing: finalCanonical.length, createdCodes, ticketCodes: finalCanonical.map(entry => entry.ticketKey) };
+        };
+
+
+        window.ensureDepositTicketsForGroup = async function(groupData) {
+            if (!db || !groupData) return { created: 0, existing: 0, createdCodes: [], ticketCodes: [] };
+            const expectedQty = Math.max(1, parseInt(groupData.qty || '1', 10) || 1);
+            const matchedPaymentKeys = [...new Set((groupData.paymentKeys || []).filter(Boolean))].sort();
+            const anchorPaymentKey = groupData.anchorPaymentKey || matchedPaymentKeys[0] || '';
+            const planIdentity = groupData.depositPlanId || anchorPaymentKey || `${groupData.uid || ''}|${groupData.eventId || ''}|${groupData.category || ''}`;
+            if (!anchorPaymentKey) throw new Error('Pembayaran deposit utama tidak ditemukan.');
+
+            const eventId = groupData.eventId || '';
+            const ownerId = groupData.ownerId || 'SUPER_ADMIN';
+            const category = groupData.category || '';
+            const eventData = window.eventDataMap?.[eventId] || {};
+            const categoryLower = category.toLowerCase();
+            const isTerusan = categoryLower.includes('terusan');
+            let seasonScanQuota = 0;
+            if (isTerusan && eventData.tiket) {
+                seasonScanQuota = categoryLower.includes('ekonomi')
+                    ? parseInt(eventData.tiket.trs_eco_scan || 0, 10) || 0
+                    : parseInt(eventData.tiket.trs_vip_scan || 0, 10) || 0;
+            }
+            const seatValues = (groupData.selectedSeat || '').toString().split(/\s*,\s*/).filter(Boolean);
+            let serverOffset = 0;
+            try {
+                const offsetSnap = await db.ref('.info/serverTimeOffset').once('value');
+                serverOffset = Number(offsetSnap.val() || 0);
+            } catch (e) {}
+
+            const createdCodes = [];
+            const resolvedCodes = [];
+            for (let issueSlot = 0; issueSlot < expectedQty; issueSlot++) {
+                let committedCode = '';
+                for (let salt = 0; salt < 5 && !committedCode; salt++) {
+                    const codeSeed = `DEPOSIT|${planIdentity}`;
+                    const ticketCode = await window.buildDeterministicTicketCode(codeSeed, issueSlot, ownerId, eventId, salt);
+                    let payload = {
+                        code: ticketCode,
+                        paymentId: anchorPaymentKey,
+                        depositPlanId: groupData.depositPlanId || '',
+                        depositIssueSlot: issueSlot,
+                        issuanceVersion: 'v21-deposit',
+                        paymentQty: expectedQty,
+                        uid: groupData.uid,
+                        userName: groupData.userName,
+                        eventId,
+                        eventName: groupData.eventName,
+                        category,
+                        status: 'ACTIVE',
+                        ownerId,
+                        createdAt: Date.now() + serverOffset
+                    };
+                    if (isTerusan) {
+                        payload.type = 'terusan';
+                        payload.quota = seasonScanQuota;
+                        payload.remaining = seasonScanQuota;
+                    }
+                    if (groupData.selectedTribun) payload.selectedTribun = groupData.selectedTribun;
+                    if (seatValues.length) payload.selectedSeat = seatValues[issueSlot] || seatValues[seatValues.length - 1];
+                    if (groupData.customFormAnswers) payload.customFormAnswers = groupData.customFormAnswers;
+                    payload = cleanObject(payload);
+
+                    let ticketAlreadyExisted = false;
+                    const result = await db.ref(`tickets/${ticketCode}`).transaction(current => {
+                        if (!current) return payload;
+                        const sameDeposit =
+                            current.uid === groupData.uid &&
+                            current.eventId === eventId &&
+                            (current.category || '') === category &&
+                            Number(current.depositIssueSlot) === issueSlot &&
+                            ((current.depositPlanId || '') === (groupData.depositPlanId || '') || current.paymentId === anchorPaymentKey);
+                        if (sameDeposit) {
+                            ticketAlreadyExisted = true;
+                            return current;
+                        }
+                        return;
+                    }, undefined, false);
+                    const resolved = result?.snapshot?.val();
+                    if (resolved && Number(resolved.depositIssueSlot) === issueSlot && resolved.uid === groupData.uid && resolved.eventId === eventId) {
+                        committedCode = ticketCode;
+                        resolvedCodes.push(ticketCode);
+                        if (result.committed && !ticketAlreadyExisted) {
+                            createdCodes.push(ticketCode);
+                            if (eventData.raffle_enabled && resolved.raffle_number === undefined) {
+                                const raffleNumber = await window.reserveRaffleNumber(eventId);
+                                if (raffleNumber !== null && raffleNumber !== undefined) {
+                                    await db.ref(`tickets/${ticketCode}/raffle_number`).set(raffleNumber);
+                                }
+                            }
+                        }
+                    }
                 }
+                if (!committedCode) throw new Error(`Gagal menerbitkan tiket deposit slot ${issueSlot + 1} secara aman.`);
             }
 
-            return { created: missingQty, existing: existingCount + missingQty, createdCodes };
+            const uniqueCodes = [...new Set(resolvedCodes)];
+            if (uniqueCodes.length !== expectedQty) {
+                throw new Error(`Jumlah tiket deposit tidak sesuai. Diharapkan ${expectedQty}, ditemukan ${uniqueCodes.length}.`);
+            }
+            return { created: createdCodes.length, existing: uniqueCodes.length, createdCodes, ticketCodes: uniqueCodes };
+        };
+
+        window.getCanonicalTicketDataset = function(tickets, payments) {
+            const result = [];
+            const grouped = {};
+            Object.entries(tickets || {}).forEach(([ticketKey, ticket]) => {
+                if (!ticket) return;
+                if (!ticket.paymentId || window.isTicketLifecycleArtifact(ticket)) {
+                    result.push([ticketKey, ticket]);
+                    return;
+                }
+                if (!grouped[ticket.paymentId]) grouped[ticket.paymentId] = [];
+                grouped[ticket.paymentId].push({ ticketKey, ticket });
+            });
+            Object.entries(grouped).forEach(([paymentKey, entries]) => {
+                const expectedQty = window.getExpectedTicketQuantity(payments?.[paymentKey] || {});
+                window.getCanonicalPaymentTicketEntries(entries, expectedQty).forEach(entry => result.push([entry.ticketKey, entry.ticket]));
+            });
+            return result;
         };
 
         window.reconcileEventTicketCounts = async function(eventId) {
             if (!eventId) return;
             try {
-                const ticketSnap = await db.ref('tickets').orderByChild('eventId').equalTo(eventId).once('value');
+                const [ticketSnap, paymentSnap] = await Promise.all([
+                    db.ref('tickets').orderByChild('eventId').equalTo(eventId).once('value'),
+                    db.ref('payments').orderByChild('eventId').equalTo(eventId).once('value')
+                ]);
                 const tickets = ticketSnap.val() || {};
+                const payments = paymentSnap.val() || {};
                 const summary = { total: 0, presale_sold: 0, reg_eco_sold: 0, reg_vip_sold: 0, reg_vvip_sold: 0, trs_eco_sold: 0, trs_vip_sold: 0 };
                 const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
-                Object.entries(tickets).forEach(([ticketCode, t]) => {
+                window.getCanonicalTicketDataset(tickets, payments).forEach(([ticketCode, t]) => {
                     if (!t || !t.eventId || t.status === 'TRANSFERRED' || window.isTicketReplacedByUpgrade(t, ticketCode, upgradeReplacementMap)) return;
                     summary.total += 1;
                     const catKey = window.getEventCategorySoldKey(t.category);
@@ -454,7 +686,7 @@
                 spo_ecoQ: 0, spo_ecoR: 0, spo_vipQ: 0, spo_vipR: 0, spo_vvipQ: 0, spo_vvipR: 0
             };
             const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
-            Object.entries(tickets).forEach(([ticketCode, t]) => {
+            window.getCanonicalTicketDataset(tickets, payments).forEach(([ticketCode, t]) => {
                 if (!t || t.type === 'sponsor' || t.status === 'TRANSFERRED' || window.isTicketReplacedByUpgrade(t, ticketCode, upgradeReplacementMap)) return;
                 const eventData = window.eventDataMap?.[t.eventId] || {};
                 const evOwner = eventData.ownerId || 'SUPER_ADMIN';
@@ -3741,7 +3973,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             window.updateAdminSalesSummaryFromTickets?.();
             window.updateFinanceSummaryCards?.();
             window.repairMissingTicketsForApprovedPayments?.();
-            if (window.isSuperAdmin) window.updateVendorDashboardList?.();
+            if (window.isSuperAdmin) {
+                window.pruneOverGeneratedTicketsForPayments?.();
+                window.updateVendorDashboardList?.();
+            }
         };
 
         function listenToAdminData() {
@@ -4136,7 +4371,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     group.approvedSum += amount;
                     group.approvedCount += 1;
                     group.installmentCount += 1;
-                } else if (status === 'PENDING') {
+                } else if (status === 'PENDING' || status === 'PROCESSING') {
                     group.pendingSum += amount;
                     group.pendingCount += 1;
                     group.installmentCount += 1;
@@ -4168,9 +4403,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 c.innerHTML = ''; const data = snap.val() || {}; const allKeys = Object.keys(data);
                 const ticketUpgradeReplacementMap = window.getUpgradeReplacementMap(data);
                 let paymentUpgradeReplacementMap = {};
+                let userPaymentsForTicketDisplay = {};
                 try {
                     const paymentSnap = await db.ref('payments').orderByChild('uid').equalTo(uid).once('value');
                     const paymentData = paymentSnap.val() || {};
+                    userPaymentsForTicketDisplay = paymentData;
                     Object.entries(paymentData).forEach(([paymentId, payment]) => {
                         if (!payment || (payment.type || '').toString().toUpperCase() !== 'UPGRADE') return;
                         if ((payment.status || '').toString().toUpperCase() !== 'APPROVED') return;
@@ -4189,6 +4426,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const upgradeReplacementMap = { ...paymentUpgradeReplacementMap, ...ticketUpgradeReplacementMap };
                 window.userUpgradeReplacementMap = upgradeReplacementMap;
                 window.userUpgradedTicketCodes = new Set(Object.keys(upgradeReplacementMap));
+                const canonicalDisplayData = Object.fromEntries(window.getCanonicalTicketDataset(data, userPaymentsForTicketDisplay));
                 const transferredOldKeys = allKeys.filter(k => data[k]?.status === 'TRANSFERRED');
                 transferredOldKeys.forEach(ticketCode => {
                     db.ref(`ticketTransfers/${ticketCode}`).once('value')
@@ -4203,10 +4441,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 });
                 // Transferred originals are removed from the active list, while upgraded originals
                 // remain visible as a locked, non-clickable audit card.
-                const keys = allKeys.filter(k => data[k]?.status !== 'TRANSFERRED');
+                const keys = Object.keys(canonicalDisplayData).filter(k => canonicalDisplayData[k]?.status !== 'TRANSFERRED');
                 if(keys.length === 0) { c.innerHTML = '<div class="col-span-full text-center py-10 text-gray-500 border border-dashed border-white/10 rounded-xl">Belum ada tiket.</div>'; return; }
                 keys.reverse().forEach(k => {
-                    const t = data[k]; const isSponsor = t.type === 'sponsor'; const isTerusan = (t.category || '').toLowerCase().includes('terusan');
+                    const t = canonicalDisplayData[k]; const isSponsor = t.type === 'sponsor'; const isTerusan = (t.category || '').toLowerCase().includes('terusan');
                     const upgradeReplacement = upgradeReplacementMap[k] || null;
                     const isUpgraded = window.isTicketReplacedByUpgrade(t, k, upgradeReplacementMap);
                     const isTransferred = t.status === 'TRANSFERRED';
@@ -4295,10 +4533,14 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
                 regularEntries.forEach(([k, p]) => {
                     const status = (p.status || 'PENDING').toString().toUpperCase();
-                    if (status === 'PENDING') {
+                    if (status === 'PENDING' || status === 'PROCESSING') {
                         hasPending = true;
                         const pendingLabel = (p.type || '').toString().toUpperCase() === 'UPGRADE' ? `Upgrade dari ${p.currentCategory || 'tiket'} ke ${p.category}` : `${p.qty || 1} Tiket - Kategori ${p.category || '-'}`;
-                        pt.innerHTML += `<div class="glass-card rounded-2xl p-6 border border-yellow-500/50 shadow-[0_0_20px_rgba(234,179,8,0.15)] relative"><div class="absolute top-0 right-0 bg-yellow-500 text-dark font-bold px-4 py-1 text-xs rounded-bl-lg">PENDING</div><h3 class="font-bold text-xl text-white mb-1">${p.eventName || '-'}</h3><p class="text-sm text-gray-300 mb-2">${pendingLabel}</p><p class="font-bold text-green-400 mb-4 text-lg">Total: ${formatRp(p.total || 0)}</p><button type="button" onclick="window.sendWAProof('${k}', \`${p.eventName || ''}\`, '${p.category || ''}', ${p.qty || 1}, ${p.total || 0}, '${p.ownerId || 'SUPER_ADMIN'}')" class="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3 rounded-lg text-sm transition-colors shadow-lg cursor-pointer"><i class="fa-brands fa-whatsapp text-lg mr-2"></i> Kirim Bukti Pembayaran ke WA Admin</button></div>`;
+                        const isProcessing = status === 'PROCESSING';
+                        const pendingAction = isProcessing
+                            ? `<div class="w-full bg-cyan-500/10 border border-cyan-400/30 text-cyan-200 font-bold py-3 rounded-lg text-sm text-center"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Sedang diterbitkan oleh admin</div>`
+                            : `<button type="button" onclick="window.sendWAProof('${k}', \`${p.eventName || ''}\`, '${p.category || ''}', ${p.qty || 1}, ${p.total || 0}, '${p.ownerId || 'SUPER_ADMIN'}')" class="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3 rounded-lg text-sm transition-colors shadow-lg cursor-pointer"><i class="fa-brands fa-whatsapp text-lg mr-2"></i> Kirim Bukti Pembayaran ke WA Admin</button>`;
+                        pt.innerHTML += `<div class="glass-card rounded-2xl p-6 border ${isProcessing ? 'border-cyan-500/50' : 'border-yellow-500/50'} relative"><div class="absolute top-0 right-0 ${isProcessing ? 'bg-cyan-500' : 'bg-yellow-500'} text-dark font-bold px-4 py-1 text-xs rounded-bl-lg">${isProcessing ? 'DIPROSES' : 'PENDING'}</div><h3 class="font-bold text-xl text-white mb-1">${p.eventName || '-'}</h3><p class="text-sm text-gray-300 mb-2">${pendingLabel}</p><p class="font-bold text-green-400 mb-4 text-lg">Total: ${formatRp(p.total || 0)}</p>${pendingAction}</div>`;
                         return;
                     }
                     hasHistory = true;
@@ -4319,7 +4561,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     if (pending) {
                         hasPending = true;
                         const p = pending.data || {};
-                        pt.innerHTML += `<div class="glass-card rounded-2xl p-6 border border-cyan-500/40 shadow-[0_0_20px_rgba(34,211,238,0.12)] relative"><div class="absolute top-0 right-0 bg-yellow-500 text-dark font-bold px-4 py-1 text-xs rounded-bl-lg">MENUNGGU VALIDASI</div><h3 class="font-bold text-xl text-white mb-1">${group.eventName || p.eventName || '-'}</h3><p class="text-sm text-gray-300">Deposit ${group.qty || 1} Tiket - ${group.category || '-'}</p>${progressHtml}<p class="text-sm text-gray-300 mt-3">Cicilan saat ini: <b class="text-green-400">${formatRp(pending.amount)}</b></p><button type="button" onclick="window.sendWAProof('${pending.key}', \`${p.eventName || group.eventName || ''}\`, '${p.category || group.category || ''}', ${p.qty || group.qty || 1}, ${pending.amount || 0}, '${p.ownerId || group.ownerId || 'SUPER_ADMIN'}')" class="w-full mt-4 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3 rounded-lg text-sm transition-colors shadow-lg cursor-pointer"><i class="fa-brands fa-whatsapp text-lg mr-2"></i> Kirim Bukti Pembayaran ke WA Admin</button></div>`;
+                        const isProcessing = (p.status || '').toString().toUpperCase() === 'PROCESSING';
+                        const actionHtml = isProcessing
+                            ? `<div class="w-full mt-4 bg-cyan-500/10 border border-cyan-400/30 text-cyan-200 font-bold py-3 rounded-lg text-sm text-center"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Deposit sedang diproses</div>`
+                            : `<button type="button" onclick="window.sendWAProof('${pending.key}', \`${p.eventName || group.eventName || ''}\`, '${p.category || group.category || ''}', ${p.qty || group.qty || 1}, ${pending.amount || 0}, '${p.ownerId || group.ownerId || 'SUPER_ADMIN'}')" class="w-full mt-4 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3 rounded-lg text-sm transition-colors shadow-lg cursor-pointer"><i class="fa-brands fa-whatsapp text-lg mr-2"></i> Kirim Bukti Pembayaran ke WA Admin</button>`;
+                        pt.innerHTML += `<div class="glass-card rounded-2xl p-6 border border-cyan-500/40 relative"><div class="absolute top-0 right-0 ${isProcessing ? 'bg-cyan-500' : 'bg-yellow-500'} text-dark font-bold px-4 py-1 text-xs rounded-bl-lg">${isProcessing ? 'DIPROSES' : 'MENUNGGU VALIDASI'}</div><h3 class="font-bold text-xl text-white mb-1">${group.eventName || p.eventName || '-'}</h3><p class="text-sm text-gray-300">Deposit ${group.qty || 1} Tiket - ${group.category || '-'}</p>${progressHtml}<p class="text-sm text-gray-300 mt-3">Cicilan saat ini: <b class="text-green-400">${formatRp(pending.amount)}</b></p>${actionHtml}</div>`;
                         return;
                     }
 
@@ -4666,7 +4912,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             window.populateTribunOptionsForCategory(eventData, category);
         };
 
-        window.processCheckout = async function(e) {
+        window.__processCheckoutCore = async function(e) {
             e.preventDefault();
             const agreeCheckbox = document.getElementById('det-agree');
             if (!agreeCheckbox || !agreeCheckbox.checked) { 
@@ -4820,6 +5066,19 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             } catch (err) { Swal.fire({icon: 'error', title: 'Transaksi Gagal', text: err.message, background:'#1e293b', color:'#fff'}); } 
             finally { btn.innerHTML = "Checkout Pembayaran"; btn.disabled = false; }
         }
+
+        window.processCheckout = async function(e) {
+            e?.preventDefault?.();
+            if (window.__checkoutSubmissionLock) {
+                return Toast.fire({ icon: 'info', title: 'Checkout sedang diproses. Jangan tekan tombol dua kali.' });
+            }
+            window.__checkoutSubmissionLock = true;
+            try {
+                return await window.__processCheckoutCore(e || { preventDefault() {} });
+            } finally {
+                window.__checkoutSubmissionLock = false;
+            }
+        };
 
         window.renderDepositSection = function(ev, evId) {
             const depositSection = document.getElementById('deposit-section');
@@ -5145,7 +5404,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             return null;
         };
 
-        window.processDeposit = async function(e) {
+        window.__processDepositCore = async function(e) {
             const evId = document.getElementById('co-evid')?.value || window.currentViewingEventId;
             const eventData = window.eventDataMap && window.eventDataMap[evId];
             if (!eventData) { return Swal.fire({ icon:'error', title:'Event tidak ditemukan!', background:'#1e293b', color:'#fff' }); }
@@ -5307,6 +5566,19 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             }
         }
 
+        window.processDeposit = async function(e) {
+            e?.preventDefault?.();
+            if (window.__depositSubmissionLock) {
+                return Toast.fire({ icon: 'info', title: 'Deposit sedang diproses. Jangan tekan tombol dua kali.' });
+            }
+            window.__depositSubmissionLock = true;
+            try {
+                return await window.__processDepositCore(e || { preventDefault() {} });
+            } finally {
+                window.__depositSubmissionLock = false;
+            }
+        };
+
         window.sendWAProof = async function(paymentId, eventName, category, qty, total, pOwnerId) {
             try {
                 const user = auth.currentUser; 
@@ -5424,33 +5696,30 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             }
 
             const ownerId = pData.ownerId || group.ownerId || 'SUPER_ADMIN';
-            const eventData = window.eventDataMap?.[eventId] || {};
-            const categoryLower = (category || '').toLowerCase();
-            const isTerusan = categoryLower.includes('terusan');
-            let seasonScanQuota = 0;
-            if (isTerusan && eventData.tiket) seasonScanQuota = categoryLower.includes('ekonomi') ? parseInt(eventData.tiket.trs_eco_scan) || 0 : parseInt(eventData.tiket.trs_vip_scan) || 0;
-
             const selectedTribun = group.selectedTribun || pData.selectedTribun || '';
             const selectedSeat = group.selectedSeat || pData.selectedSeat || '';
             const seatValues = selectedSeat.toString().split(/\s*,\s*/).filter(Boolean);
             const ticketCount = seatValues.length || parseInt(group.qty || pData.qty || '1', 10) || 1;
-            const createdTicketCodes = [];
-            for (let i = 0; i < ticketCount; i++) {
-                const ticketCode = await window.generateSecureTicketCode(ownerId, eventId, eventData);
-                const raffleNumber = eventData.raffle_enabled ? await window.reserveRaffleNumber(eventId) : null;
-                const tixPayload = { code: ticketCode, paymentId: paymentKey, depositPlanId: group.depositPlanId || pData.depositPlanId || '', uid: userId, userName: pData.userName || group.userName, eventId, eventName: pData.eventName || group.eventName, category, status: 'ACTIVE', ownerId, createdAt: firebase.database.ServerValue.TIMESTAMP };
-                if (raffleNumber !== null && typeof raffleNumber !== 'undefined') tixPayload.raffle_number = raffleNumber;
-                if (isTerusan) { tixPayload.type = 'terusan'; tixPayload.quota = seasonScanQuota; tixPayload.remaining = seasonScanQuota; }
-                if (selectedTribun) tixPayload.selectedTribun = selectedTribun;
-                if (seatValues.length) tixPayload.selectedSeat = seatValues[i] || seatValues[seatValues.length - 1];
-                if (pData.customFormAnswers) tixPayload.customFormAnswers = pData.customFormAnswers;
-                await db.ref(`tickets/${ticketCode}`).set(cleanObject(tixPayload));
-                createdTicketCodes.push(ticketCode);
-            }
-
-            await db.ref(`events/${eventId}/sold`).transaction(c => (c || 0) + ticketCount);
-            const catKey = window.getEventCategorySoldKey(category);
-            if (catKey) await db.ref(`events/${eventId}/tiket/${catKey}`).transaction(c => (c || 0) + ticketCount);
+            // Deposit dapat mencapai 100% dari beberapa pembayaran yang disetujui hampir bersamaan.
+            // Semua pemanggil memakai kode deterministik + transaction yang sama, sehingga satu slot
+            // deposit hanya dapat menghasilkan satu tiket aktif.
+            const ensured = await window.ensureDepositTicketsForGroup({
+                paymentKeys: matchedKeys,
+                anchorPaymentKey: [...matchedKeys].sort()[0] || paymentKey,
+                depositPlanId: group.depositPlanId || pData.depositPlanId || '',
+                qty: ticketCount,
+                uid: userId,
+                userName: pData.userName || group.userName,
+                eventId,
+                eventName: pData.eventName || group.eventName,
+                category,
+                ownerId,
+                selectedTribun,
+                selectedSeat,
+                customFormAnswers: pData.customFormAnswers
+            });
+            const createdTicketCodes = ensured.ticketCodes || [];
+            await window.reconcileEventTicketCounts(eventId);
             const updates = {};
             matchedKeys.forEach(k => {
                 updates[`payments/${k}/depositConverted`] = true;
@@ -5462,6 +5731,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if (typeof window.loadUserDashboard === 'function') window.loadUserDashboard(userId);
         }
 
+        window.tryConvertApprovedDepositPayment = tryConvertApprovedDepositPayment;
+
         window.repairMissingTicketsForApprovedPayments = async function() {
             if (!db || window.__repairMissingTicketsRunning || window.__ticketCreationLock) return;
             window.__repairMissingTicketsRunning = true;
@@ -5472,29 +5743,29 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 ]);
                 const payments = paymentsSnap.val() || {};
                 const tickets = ticketsSnap.val() || {};
-                const ticketCountByPayment = {};
-                Object.values(tickets || {}).forEach(ticket => {
-                    if (ticket?.paymentId) {
-                        ticketCountByPayment[ticket.paymentId] = (ticketCountByPayment[ticket.paymentId] || 0) + 1;
-                    }
+                const ticketEntriesByPayment = {};
+                Object.entries(tickets || {}).forEach(([ticketKey, ticket]) => {
+                    if (!ticket?.paymentId) return;
+                    if (!ticketEntriesByPayment[ticket.paymentId]) ticketEntriesByPayment[ticket.paymentId] = [];
+                    ticketEntriesByPayment[ticket.paymentId].push({ ticketKey, ticket });
                 });
 
                 const repairTasks = [];
+                const affectedEvents = new Set();
                 Object.entries(payments).forEach(([paymentKey, pData]) => {
                     if (!pData) return;
                     const status = (pData.status || '').toString().toUpperCase();
                     if (status !== 'APPROVED') return;
                     const paymentType = (pData.type || '').toString().toUpperCase();
                     if (paymentType === 'DEPOSIT' || paymentType === 'UPGRADE') return;
-                    const qty = parseInt(pData.qty || '1', 10) || 1;
-                    const existingCount = ticketCountByPayment[paymentKey] || 0;
-                    const missingQty = Math.max(0, qty - existingCount);
-                    if (missingQty <= 0) return;
+                    const qty = window.getExpectedTicketQuantity(pData);
+                    const existingCount = window.getCanonicalPaymentTicketEntries(ticketEntriesByPayment[paymentKey] || [], qty).length;
+                    if (existingCount >= qty) return;
 
                     repairTasks.push((async () => {
                         await window.ensureTicketsForPayment(paymentKey, {
                             ...pData,
-                            qty: missingQty,
+                            qty,
                             eventId: pData.eventId,
                             eventName: pData.eventName,
                             category: pData.category || '',
@@ -5503,12 +5774,14 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             selectedSeat: pData.selectedSeat,
                             customFormAnswers: pData.customFormAnswers
                         });
+                        if (pData.eventId) affectedEvents.add(pData.eventId);
                     })());
                 });
 
                 if (repairTasks.length) {
                     await Promise.all(repairTasks);
-                    Toast.fire({ icon: 'success', title: 'Tiket berhasil dipulihkan untuk pembayaran approved.' });
+                    for (const eventId of affectedEvents) await window.reconcileEventTicketCounts(eventId);
+                    Toast.fire({ icon: 'success', title: 'Tiket approved berhasil diselaraskan tanpa duplikasi.' });
                 }
             } catch (e) {
                 console.warn('repairMissingTicketsForApprovedPayments failed', e);
@@ -5534,17 +5807,48 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         };async function approvePayment(btn, key, uid, userName, evId, eventName, category, qty) {
             if(!confirm('Approve pembayaran ini?')) return;
             btn.disabled = true; let ogText = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Proses';
+            let paymentRef = null;
+            let processingOwner = auth.currentUser?.uid || window.currentUserData?.uid || 'ADMIN';
             try {
-                const pStatusSnap = await db.ref(`payments/${key}`).once('value');
-                const pData = pStatusSnap.val() || {};
-                const existingStatus = (pData.status || '').toString().toUpperCase();
-                if (['APPROVED', 'REJECTED'].includes(existingStatus)) {
-                    Toast.fire({icon:'info', title:'Pembayaran ini sudah diproses sebelumnya!'});
+                paymentRef = db.ref(`payments/${key}`);
+                const claimNow = Date.now();
+                const claimResult = await paymentRef.transaction(current => {
+                    if (!current) return;
+                    const status = (current.status || '').toString().toUpperCase();
+                    const currentOwnerId = window.getPaymentOwnerId(current) || 'SUPER_ADMIN';
+                    if (window.isVendor && currentOwnerId !== window.currentUserData?.uid) return;
+                    const staleProcessing = status === 'PROCESSING' && claimNow - Number(current.processingAt || 0) > 5 * 60 * 1000;
+                    if (status !== 'PENDING' && !staleProcessing) return;
+                    return {
+                        ...current,
+                        status: 'PROCESSING',
+                        processingBy: processingOwner,
+                        processingAt: claimNow,
+                        processingVersion: 'v21'
+                    };
+                }, undefined, false);
+                if (!claimResult.committed) {
+                    const latest = (await paymentRef.once('value')).val() || {};
+                    const latestStatus = (latest.status || '').toString().toUpperCase();
+                    const message = latestStatus === 'PROCESSING'
+                        ? 'Pembayaran sedang diproses oleh admin lain. Tunggu beberapa saat.'
+                        : 'Pembayaran ini sudah diproses sebelumnya.';
+                    btn.disabled = false;
+                    btn.innerHTML = ogText;
+                    Toast.fire({icon:'info', title: message});
                     return;
                 }
+                const pData = claimResult.snapshot.val() || {};
 
                 const ownerId = window.getPaymentOwnerId(pData) || 'SUPER_ADMIN';
                 if (window.isVendor && ownerId !== window.currentUserData?.uid) {
+                    await paymentRef.transaction(current => {
+                        if (!current || current.processingBy !== processingOwner || (current.status || '').toString().toUpperCase() !== 'PROCESSING') return current;
+                        const restored = { ...current, status: 'PENDING' };
+                        delete restored.processingBy;
+                        delete restored.processingAt;
+                        return restored;
+                    }, undefined, false);
                     btn.disabled = false; btn.innerHTML = ogText;
                     return Swal.fire('Akses Ditolak', 'Pembayaran ini bukan milik vendor Anda.', 'error');
                 }
@@ -5639,6 +5943,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         const upgradeUpdates = {};
                         upgradeUpdates[`payments/${key}/status`] = 'APPROVED';
                         upgradeUpdates[`payments/${key}/approvedAt`] = upgradedAt;
+                        upgradeUpdates[`payments/${key}/processingBy`] = null;
+                        upgradeUpdates[`payments/${key}/processingAt`] = null;
                         upgradeUpdates[`payments/${key}/replacedTicketCode`] = ticketCode;
                         upgradeUpdates[`payments/${key}/upgradedTicketCode`] = newTicketCode;
                         upgradeUpdates[`payments/${key}/retiredTicketSnapshot`] = retiredOldTicket;
@@ -5677,15 +5983,18 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         window.refreshDashboardAfterDataMutation?.();
                         Toast.fire({icon:'success', title:'Upgrade disetujui! Tiket lama dikunci dan tiket baru diterbitkan.'});
                     } else {
-                        await db.ref(`payments/${key}`).update({status: 'APPROVED', approvedAt: firebase.database.ServerValue.TIMESTAMP});
-                        if (window.globalPaymentsData) {
-                            window.globalPaymentsData[key] = { ...(window.globalPaymentsData[key] || {}), status: 'APPROVED', approvedAt: Date.now() };
-                        }
-                        window.refreshDashboardAfterDataMutation?.();
-
                         if (isDeposit) {
-                            await tryConvertApprovedDepositPayment(key, pData);
+                            await paymentRef.update({
+                                status: 'APPROVED',
+                                approvedAt: firebase.database.ServerValue.TIMESTAMP,
+                                processingBy: null,
+                                processingAt: null
+                            });
+                            await tryConvertApprovedDepositPayment(key, { ...pData, status: 'APPROVED' });
                         } else {
+                            // Tiket diterbitkan dahulu secara idempotent. Status APPROVED baru ditulis
+                            // setelah jumlah tiket persis sama dengan qty pembayaran, sehingga listener
+                            // pemulihan tidak dapat berlomba dan membuat tiket ganda.
                             const ensured = await window.ensureTicketsForPayment(key, {
                                 ...pData,
                                 uid,
@@ -5693,25 +6002,53 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                                 eventId: evId,
                                 eventName,
                                 category,
-                                qty,
+                                qty: window.getExpectedTicketQuantity(pData),
                                 ownerId,
                                 selectedTribun: pData.selectedTribun,
                                 selectedSeat: pData.selectedSeat,
                                 customFormAnswers: pData.customFormAnswers
                             });
-                            await window.reconcileEventTicketCounts(evId);
-                            if (ensured.created === 0) {
-                                Toast.fire({ icon: 'success', title: 'Approved! Tiket sudah ada sebelumnya.' });
-                                return;
+                            const expectedQty = window.getExpectedTicketQuantity(pData);
+                            if (ensured.existing !== expectedQty) {
+                                throw new Error(`Jumlah tiket hasil penerbitan tidak sesuai. Diharapkan ${expectedQty}, ditemukan ${ensured.existing}.`);
                             }
+                            await window.reconcileEventTicketCounts(evId);
+                            await paymentRef.update({
+                                status: 'APPROVED',
+                                approvedAt: firebase.database.ServerValue.TIMESTAMP,
+                                processingBy: null,
+                                processingAt: null,
+                                ticketIssuedQty: ensured.existing,
+                                ticketCodes: (ensured.ticketCodes || []).join(','),
+                                issuanceVersion: 'v21'
+                            });
                         }
-                        Toast.fire({icon:'success', title:'Approved!'});
+                        if (window.globalPaymentsData) {
+                            window.globalPaymentsData[key] = { ...(window.globalPaymentsData[key] || pData), status: 'APPROVED', approvedAt: Date.now(), processingBy: null, processingAt: null };
+                        }
+                        window.refreshDashboardAfterDataMutation?.();
+                        Toast.fire({icon:'success', title:'Approved! Tiket diterbitkan sesuai jumlah pembelian.'});
                     }
                 } finally {
                     window.__ticketCreationLock = false;
                     window.pruneOverGeneratedTicketsForPayments?.();
                 }
             } catch(e) {
+                try {
+                    if (paymentRef) {
+                        await paymentRef.transaction(current => {
+                            if (!current) return current;
+                            if ((current.status || '').toString().toUpperCase() !== 'PROCESSING') return current;
+                            if (current.processingBy !== processingOwner) return current;
+                            const restored = { ...current, status: 'PENDING' };
+                            delete restored.processingBy;
+                            delete restored.processingAt;
+                            return restored;
+                        }, undefined, false);
+                    }
+                } catch (rollbackError) {
+                    console.warn('[PAYMENT APPROVAL] Gagal mengembalikan status PROCESSING:', rollbackError);
+                }
                 btn.disabled = false;
                 btn.innerHTML = ogText;
                 window.__ticketCreationLock = false;

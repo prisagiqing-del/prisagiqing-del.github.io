@@ -4,7 +4,7 @@
         const pOwner = p.ownerId || p.owner || p.payOwnerId || p.eventOwnerId || 'SUPER_ADMIN';
         const eventOwnerId = (p.eventId && (window.eventDataMap?.[p.eventId]?.ownerId || window.eventDataMap?.[p.eventId]?.uid || '')) || '';
         const status = (p.status || 'PENDING').toString().toUpperCase();
-        const isPending = !['APPROVED', 'REJECTED'].includes(status);
+        const isPending = status === 'PENDING';
         const ownerMatches = !!(currentUid && (pOwner === currentUid || eventOwnerId === currentUid || (pOwner === 'SUPER_ADMIN' && eventOwnerId === currentUid)));
         const fallbackVisibleForVendor = !!(window.isVendor && currentUid && isPending && ownerMatches);
         return { pOwner, eventOwnerId, ownerMatches, isVisible: !!(window.isSuperAdmin || ownerMatches || fallbackVisibleForVendor) };
@@ -58,12 +58,16 @@
                     const u = users[p.uid] || {};
                     const ev = events[p.eventId] || {};
                     const status = (p.status || 'PENDING').toString().toUpperCase();
-                    const isPending = !['APPROVED', 'REJECTED'].includes(status);
+                    const isPending = status === 'PENDING';
                     const approveArgs = [k, p.uid || '', safe(u.nama || ''), p.eventId || '', safe(p.eventName || ev.title || ''), safe(p.category || ''), (p.qty || 1)];
                     const approveOnclick = `approvePayment(this, '${approveArgs[0]}', '${approveArgs[1]}', '${approveArgs[2]}', '${approveArgs[3]}', '${approveArgs[4]}', '${approveArgs[5]}', ${approveArgs[6]})`;
                     const customAnswerBtn = p.customFormAnswers ? `<button type="button" class="view-custom-answers bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded text-[10px] font-semibold ml-2" data-answers="${encodeURIComponent(JSON.stringify(p.customFormAnswers || {}))}" data-code="${k}" data-eventid="${p.eventId || ''}" title="Lihat Data Tambahan">Data Tambahan</button>` : '';
                     const deleteBtn = window.isSuperAdmin ? `<button onclick="window.deletePaymentEntry('${k}')" class="ml-2 bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-xs">Hapus</button>` : '';
-                    const actionBtn = isPending ? `<button onclick="${approveOnclick}" class="bg-green-600 text-white px-3 py-1 rounded text-xs">Approve</button><button onclick="rejectPayment('${k}')" class="ml-2 bg-red-600 text-white px-3 py-1 rounded text-xs">Reject</button>${deleteBtn}${customAnswerBtn}` : `<span class="text-xs text-gray-500">Selesai</span>${deleteBtn}${customAnswerBtn}`;
+                    const actionBtn = isPending
+                        ? `<button onclick="${approveOnclick}" class="bg-green-600 text-white px-3 py-1 rounded text-xs">Approve</button><button onclick="rejectPayment('${k}')" class="ml-2 bg-red-600 text-white px-3 py-1 rounded text-xs">Reject</button>${deleteBtn}${customAnswerBtn}`
+                        : status === 'PROCESSING'
+                            ? `<span class="inline-flex items-center gap-2 text-xs text-cyan-300"><i class="fa-solid fa-spinner fa-spin"></i> Sedang diproses</span>${customAnswerBtn}`
+                            : `<span class="text-xs text-gray-500">Selesai</span>${deleteBtn}${customAnswerBtn}`;
                     const ticketType = (p.type || 'REGULAR').toString().toUpperCase();
                     const typeLabel = ticketType === 'REGULAR' ? '<span class="inline-block bg-blue-500/20 text-blue-300 px-2 py-1 rounded text-xs font-semibold mr-1">🎟️ Regular</span>' : `<span class="inline-block bg-gray-500/20 text-gray-300 px-2 py-1 rounded text-xs font-semibold mr-1">${ticketType}</span>`;
                     const tr = document.createElement('tr');
