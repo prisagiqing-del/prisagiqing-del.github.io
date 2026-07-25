@@ -495,3 +495,169 @@
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
         }
+
+        :root {
+            --bg-darker: #08051b;
+            --bg-nav: rgba(21, 10, 54, 0.88);
+            --bg-card: rgba(27, 18, 64, 0.86);
+            --color-primary: #ffd43b;
+            --color-btn: #ffb703;
+            --color-secondary: #31d7ff;
+            --text-color: #ffffff;
+            --tk-violet: #8b5cf6;
+            --tk-pink: #ff4f9a;
+            --tk-cyan: #22d3ee;
+            --tk-orange: #ff8a00;
+            --tk-lime: #a3e635;
+        }
+
+        body {
+            background:
+                radial-gradient(circle at 8% 6%, rgba(255, 79, 154, .22), transparent 26rem),
+                radial-gradient(circle at 92% 4%, rgba(49, 215, 255, .22), transparent 28rem),
+                radial-gradient(circle at 50% 65%, rgba(139, 92, 246, .16), transparent 34rem),
+                linear-gradient(145deg, #0c0622 0%, #111b46 48%, #071b35 100%) !important;
+        }
+        body::before {
+            opacity: .28;
+            background-image:
+                radial-gradient(circle at center, rgba(255,255,255,.18) 1px, transparent 1.5px),
+                linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+            background-size: 28px 28px, 56px 56px, 56px 56px;
+        }
+
+        #navbar.tk-public-nav {
+            background: linear-gradient(100deg, rgba(34, 15, 80, .94), rgba(12, 46, 89, .92)) !important;
+            border-bottom: 1px solid rgba(255,255,255,.22) !important;
+            box-shadow: 0 12px 38px rgba(4, 8, 30, .42), 0 1px 0 rgba(255,255,255,.12) inset;
+        }
+        #navbar.tk-public-nav::after {
+            content: "";
+            position: absolute;
+            left: 0; right: 0; bottom: -1px; height: 3px;
+            background: linear-gradient(90deg, #ff4f9a, #ffd43b, #22d3ee, #8b5cf6);
+            opacity: .9;
+        }
+        #navbar #nav-login-btn { color: #fff !important; background: rgba(255,255,255,.09); border-radius: 999px; }
+        #navbar button[onclick*="showPage('faq')"] { background: rgba(34,211,238,.14); border-color: rgba(34,211,238,.45) !important; color: #dffaff !important; }
+        #nav-register-btn, .glow-button, #hero-btn-text {
+            background: linear-gradient(120deg, #ffd43b, #ff9f1c 52%, #ff4f9a) !important;
+            color: #24113e !important;
+            border: 1px solid rgba(255,255,255,.6) !important;
+            box-shadow: 0 12px 32px rgba(255, 79, 154, .25), 0 10px 30px rgba(255, 183, 3, .22) !important;
+        }
+        .dynamic-text-primary {
+            background: linear-gradient(95deg, #fff36d 0%, #ff8ac0 45%, #58e7ff 100%) !important;
+            -webkit-background-clip: text !important;
+            background-clip: text !important;
+        }
+        #hero-slider {
+            background: linear-gradient(125deg, rgba(139,92,246,.18), rgba(255,79,154,.12), rgba(34,211,238,.15)) !important;
+            border-color: rgba(255,255,255,.20) !important;
+            box-shadow: 0 22px 65px rgba(3, 6, 30, .35), inset 0 1px 0 rgba(255,255,255,.12);
+        }
+        #event-section-title::before { content: "✦ "; color: #ffd43b; }
+
+        .tk-event-card {
+            position: relative;
+            border-radius: 1.65rem !important;
+            border: 1px solid rgba(255,255,255,.28) !important;
+            background: linear-gradient(155deg, rgba(83, 41, 151, .90), rgba(13, 47, 91, .96)) !important;
+            box-shadow: 0 24px 55px rgba(4, 8, 34, .45), 0 0 0 1px rgba(255,255,255,.06) inset !important;
+            isolation: isolate;
+        }
+        .tk-event-card::before {
+            content: "";
+            position: absolute; inset: 0; z-index: -1; border-radius: inherit; opacity: .75;
+            background: radial-gradient(circle at 105% 100%, rgba(34,211,238,.28), transparent 44%), radial-gradient(circle at -5% 0, rgba(255,79,154,.28), transparent 42%);
+        }
+        .tk-event-card:hover { transform: translateY(-9px) scale(1.015) !important; border-color: rgba(255,212,59,.75) !important; box-shadow: 0 30px 70px rgba(7,11,46,.55), 0 0 35px rgba(34,211,238,.16) !important; }
+        .tk-event-cover { background: #100a2c; }
+        .tk-event-cover::after { content: ""; position: absolute; inset: 0; border: 1px solid rgba(255,255,255,.16); border-radius: 1.2rem; margin: .55rem; z-index: 12; pointer-events:none; }
+        .tk-event-category { position: absolute; z-index: 20; left: .85rem; top: .85rem; padding: .42rem .72rem; border-radius: 999px; font-size: .66rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: #24113e; background: linear-gradient(110deg,#fff36d,#ff9f1c); box-shadow: 0 8px 22px rgba(0,0,0,.25); }
+        .tk-event-buy { display: inline-flex; align-items:center; gap:.5rem; padding:.58rem .82rem; border-radius:.85rem; font-size:.75rem; font-weight:900; color:#fff; background:linear-gradient(120deg,#ff4f9a,#8b5cf6); border:1px solid rgba(255,255,255,.35); box-shadow:0 8px 22px rgba(139,92,246,.3); }
+        .tk-event-buy i { transition: transform .2s ease; } .tk-event-card:hover .tk-event-buy i { transform: translateX(3px); }
+
+        .tk-user-hero {
+            display:flex; align-items:center; gap:1.15rem; padding:1.4rem 1.5rem; border-radius:1.6rem;
+            background: linear-gradient(112deg, rgba(139,92,246,.95), rgba(255,79,154,.88) 48%, rgba(34,211,238,.82));
+            border:1px solid rgba(255,255,255,.38); box-shadow:0 24px 60px rgba(12,8,45,.42), inset 0 1px 0 rgba(255,255,255,.25);
+        }
+        .tk-user-hero-icon { width:4rem; height:4rem; flex:0 0 4rem; display:grid; place-items:center; border-radius:1.25rem; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); font-size:1.75rem; color:#fff36d; box-shadow:inset 0 1px 0 rgba(255,255,255,.25); }
+        .tk-eyebrow { font-size:.68rem; font-weight:900; letter-spacing:.18em; color:#fff8bf; margin-bottom:.3rem; }
+        .tk-user-menu { padding:.45rem; border-radius:1.2rem; background:rgba(10,12,45,.72); border:1px solid rgba(255,255,255,.18); box-shadow:0 14px 34px rgba(2,5,26,.3); }
+        .tk-user-menu .user-tab-btn { border:0 !important; border-radius:.9rem; color:#cbd5e1 !important; min-height:2.9rem; }
+        .tk-user-menu .user-tab-btn:hover { color:#fff !important; background:rgba(255,255,255,.09); }
+        .tk-user-menu .user-tab-btn.active { color:#24113e !important; background:linear-gradient(105deg,#fff36d,#ff9f1c,#ff75b5); box-shadow:0 9px 24px rgba(255,79,154,.24); }
+        .tk-security-card { border-color:rgba(255,212,59,.45) !important; background:linear-gradient(135deg,rgba(255,183,3,.16),rgba(255,79,154,.12),rgba(17,24,68,.92)) !important; }
+        .tk-transaction-panel, .tk-account-panel { border:1px solid rgba(88,231,255,.24) !important; background:linear-gradient(145deg,rgba(34,47,100,.88),rgba(19,13,57,.94)) !important; }
+        #user-tickets-container > .glass-card { border:1px solid rgba(255,255,255,.23) !important; background:linear-gradient(145deg,rgba(92,45,158,.92),rgba(13,51,93,.95)) !important; box-shadow:0 20px 52px rgba(4,7,35,.42) !important; }
+
+        .tk-event-detail > div > button { padding:.65rem 1rem; border-radius:999px; color:#fff !important; background:rgba(139,92,246,.22); border:1px solid rgba(139,92,246,.45); }
+        .tk-event-detail > div > .w-full.h-48 { border-radius:1.7rem !important; border-color:rgba(255,255,255,.28) !important; box-shadow:0 28px 70px rgba(3,5,30,.5) !important; }
+        .tk-checkout-card { border:1px solid rgba(255,212,59,.55) !important; background:linear-gradient(155deg,rgba(86,42,154,.94),rgba(9,52,91,.96)) !important; box-shadow:0 26px 70px rgba(5,8,40,.48), 0 0 38px rgba(255,79,154,.12) !important; }
+        .tk-checkout-card h3 { padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,.18); }
+        .tk-checkout-form > label { color:#f4eaff !important; }
+        .tk-checkout-form select, .tk-checkout-form input[type="number"] { background:rgba(7,9,37,.78) !important; border:1px solid rgba(88,231,255,.34) !important; min-height:3.35rem; }
+        .tk-total-box { background:linear-gradient(115deg,rgba(255,212,59,.16),rgba(255,79,154,.18)) !important; border:1px solid rgba(255,212,59,.4) !important; box-shadow:inset 0 1px 0 rgba(255,255,255,.12); }
+        #co-total { color:#fff36d !important; text-shadow:0 0 18px rgba(255,212,59,.25); }
+        .tk-payment-options label { background:rgba(9,10,42,.72) !important; border:1px solid rgba(255,255,255,.2) !important; }
+        .tk-payment-options label:has(input:checked) { background:linear-gradient(125deg,rgba(255,79,154,.26),rgba(139,92,246,.3)) !important; border-color:#ff8ac0 !important; box-shadow:0 0 0 3px rgba(255,79,154,.1); transform:translateY(-2px); }
+        #deposit-section, #co-tribun-section, #co-custom-form-container { background:rgba(7,13,45,.68) !important; border-color:rgba(88,231,255,.34) !important; }
+        #btn-process-co { min-height:3.65rem; font-size:1rem; letter-spacing:.02em; }
+
+        .tk-admin-events-panel { border:1px solid rgba(88,231,255,.25) !important; background:linear-gradient(145deg,rgba(36,26,86,.94),rgba(10,39,75,.96)) !important; }
+        .tk-admin-event-row:hover { background:rgba(255,255,255,.055); }
+        .tk-event-actions { display:flex; justify-content:flex-end; gap:.45rem; }
+        .tk-event-action { display:inline-flex; align-items:center; gap:.38rem; padding:.5rem .7rem; border-radius:.75rem; font-size:.72rem; font-weight:800; transition:.2s ease; }
+        .tk-event-action-edit { color:#dffaff; background:rgba(34,211,238,.16); border:1px solid rgba(34,211,238,.4); }
+        .tk-event-action-delete { color:#ffe3ed; background:rgba(255,79,154,.15); border:1px solid rgba(255,79,154,.4); }
+        .tk-event-action:hover { transform:translateY(-2px); filter:brightness(1.15); }
+        .tk-status-live { display:inline-flex; align-items:center; gap:.4rem; color:#d9ffad; background:rgba(163,230,53,.13); border:1px solid rgba(163,230,53,.3); padding:.35rem .6rem; border-radius:999px; font-weight:800; }
+        .tk-status-live i { font-size:.45rem; color:#a3e635; box-shadow:0 0 10px #a3e635; border-radius:50%; }
+
+        .modal > div:not([data-footer-legal-backdrop]), .swal2-popup { background:linear-gradient(150deg,#2a1764,#0b3158) !important; border-color:rgba(255,255,255,.25) !important; }
+        input:focus, select:focus, textarea:focus { border-color:#58e7ff !important; box-shadow:0 0 0 4px rgba(34,211,238,.13), 0 0 22px rgba(34,211,238,.1) !important; }
+
+
+        .tk-ticket-card {
+            min-height: 16rem;
+            border-radius: 1.55rem !important;
+            border: 1px solid rgba(255,255,255,.3) !important;
+            background:
+                radial-gradient(circle at 92% 12%, rgba(255,212,59,.20), transparent 28%),
+                radial-gradient(circle at 8% 92%, rgba(34,211,238,.24), transparent 34%),
+                linear-gradient(145deg, rgba(112,55,190,.95), rgba(13,59,102,.97)) !important;
+            box-shadow: 0 24px 60px rgba(4,8,35,.46), inset 0 1px 0 rgba(255,255,255,.18) !important;
+        }
+        .tk-ticket-card::before,
+        .tk-ticket-card::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            width: 1.25rem;
+            height: 1.25rem;
+            border-radius: 50%;
+            background: #0b0a2a;
+            transform: translateY(-50%);
+            box-shadow: 0 0 0 1px rgba(255,255,255,.12);
+        }
+        .tk-ticket-card::before { left: -.68rem; }
+        .tk-ticket-card::after { right: -.68rem; }
+        .tk-ticket-category { color:#26123f; background:linear-gradient(110deg,#fff36d,#ff9f1c,#ff79b8); box-shadow:0 8px 20px rgba(0,0,0,.22); }
+        .tk-ticket-symbol { width:2.85rem; height:2.85rem; display:grid; place-items:center; border-radius:1rem; margin-bottom:1rem; color:#fff36d; font-size:1.25rem; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); box-shadow:inset 0 1px 0 rgba(255,255,255,.18); }
+        .tk-ticket-code { color:#d9e5ff; text-transform:uppercase; letter-spacing:.08em; font-weight:800; }
+        .tk-ticket-code span { display:inline-block; margin-left:.35rem; padding:.3rem .55rem; border-radius:.6rem; color:#fff; background:rgba(3,6,28,.48); border:1px dashed rgba(255,255,255,.3); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.04em; }
+        .tk-ticket-actions { border-top:1px dashed rgba(255,255,255,.24); padding-top:1rem; }
+        .tk-ticket-card button:not(:disabled) { border-color:rgba(255,255,255,.35) !important; box-shadow:0 8px 18px rgba(0,0,0,.18); }
+        @media (max-width: 767px) {
+            .tk-user-hero { align-items:flex-start; padding:1.15rem; border-radius:1.3rem; }
+            .tk-user-hero-icon { width:3.25rem; height:3.25rem; flex-basis:3.25rem; font-size:1.35rem; border-radius:1rem; }
+            .tk-user-menu { gap:.25rem !important; }
+            .tk-user-menu .user-tab-btn { padding:.72rem .85rem !important; font-size:.76rem !important; }
+            .tk-event-card { min-width:min(86vw,20rem) !important; }
+            .tk-payment-options { grid-template-columns:1fr !important; }
+            .tk-event-action span { display:none; }
+            .tk-event-action { width:2.35rem; height:2.35rem; justify-content:center; padding:0; }
+        }

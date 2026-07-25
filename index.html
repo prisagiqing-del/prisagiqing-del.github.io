@@ -95,7 +95,7 @@
 
     <script src="./assets/js/loading-overlay.js"></script>
 
-    <nav class="fixed w-full z-50 glass transition-all duration-300" id="navbar">
+    <nav class="tk-public-nav fixed w-full z-50 glass transition-all duration-300" id="navbar">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-20">
                 <div class="flex items-center cursor-pointer gap-3 mr-3 md:mr-0" onclick="showPage('home')">
@@ -216,7 +216,7 @@
                 </div>
             </div>
         </div>
-    <div id="page-event-detail" class="page bg-darker pt-24 pb-20 min-h-screen">
+    <div id="page-event-detail" class="tk-event-detail page bg-darker pt-24 pb-20 min-h-screen">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <button type="button" onclick="showPage('home')" class="text-gray-400 hover:text-white mb-6 transition-colors font-medium"><i class="fa-solid fa-arrow-left mr-2"></i> Kembali ke Beranda</button>
             
@@ -276,9 +276,9 @@
                 </div>
 
                 <div class="lg:col-span-1">
-                    <div class="glass-card rounded-2xl p-6 sticky-box border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.15)]">
+                    <div class="tk-checkout-card glass-card rounded-2xl p-6 sticky-box">
                         <h3 class="text-2xl font-bold mb-6 text-white text-center"><i class="fa-solid fa-ticket text-amber-500 mr-2"></i> Beli Tiket</h3>
-                        <form onsubmit="processCheckout(event); return false;">
+                        <form class="tk-checkout-form" onsubmit="processCheckout(event); return false;">
                             <input type="hidden" id="co-evid">
                             <input type="hidden" id="co-title">
                             <input type="hidden" id="co-date">
@@ -293,14 +293,14 @@
                                 <option value="2">2 Tiket</option>
                             </select>
 
-                            <div class="flex justify-between items-center mb-6 bg-dark/80 p-5 rounded-xl border border-white/10 shadow-inner">
+                            <div class="tk-total-box flex justify-between items-center mb-6 p-5 rounded-xl">
                                 <span class="text-sm text-gray-400 font-medium">Total Tagihan</span>
                                 <span id="co-total" class="text-2xl font-black text-green-400">Rp 0</span>
                             </div>
 
                             <div id="co-payment-type-box" class="mb-6">
                                 <p class="text-xs uppercase tracking-widest font-semibold text-gray-400 mb-3">Metode Pembayaran</p>
-                                <div class="grid grid-cols-2 gap-3">
+                                <div class="tk-payment-options grid grid-cols-2 gap-3">
                                     <label class="cursor-pointer rounded-2xl border border-white/10 bg-slate-950/80 p-4 text-center transition-colors hover:border-amber-500">
                                         <input type="radio" name="co-payment-type" value="checkout" checked class="sr-only" onchange="window.updatePaymentTypeUI()" />
                                         <div class="text-sm font-bold text-white">Checkout Sekarang</div>
@@ -390,20 +390,27 @@
     </div>
 
     <div id="page-user-dash" class="page pt-24 pb-10 min-h-screen max-w-6xl mx-auto px-4">
-        <h2 class="text-3xl font-bold text-white mb-6">Dashboard Pengguna</h2>
+        <section class="tk-user-hero mb-7">
+            <div class="tk-user-hero-icon"><i class="fa-solid fa-ticket-simple"></i></div>
+            <div class="min-w-0">
+                <p class="tk-eyebrow">PUSAT TRANSAKSI & TIKET</p>
+                <h2 class="text-2xl md:text-4xl font-black text-white">Halo, <span id="user-dashboard-name">Pengguna</span></h2>
+                <p class="text-sm md:text-base text-slate-200/90 mt-2">Kelola pembayaran, tiket aktif, riwayat, dan keamanan akun dalam satu tempat.</p>
+            </div>
+        </section>
         
-        <div class="flex overflow-x-auto gap-2 mb-8 border-b border-white/10 pb-2 custom-scroll">
-            <button type="button" onclick="switchUserTab('overview')" id="btn-utab-overview" class="user-tab-btn active px-5 py-3 text-sm font-bold text-amber-500 border-b-2 border-amber-500 whitespace-nowrap transition-colors"><i class="fa-solid fa-house mr-2"></i>Beranda</button>
-            <button type="button" onclick="switchUserTab('tiket')" id="btn-utab-tiket" class="user-tab-btn px-5 py-3 text-sm font-bold text-gray-400 hover:text-white whitespace-nowrap transition-colors"><i class="fa-solid fa-ticket mr-2"></i>Tiket Saya</button>
-            <button type="button" onclick="switchUserTab('riwayat')" id="btn-utab-riwayat" class="user-tab-btn px-5 py-3 text-sm font-bold text-gray-400 hover:text-white whitespace-nowrap transition-colors"><i class="fa-solid fa-clock-rotate-left mr-2"></i>Riwayat Transaksi</button>
-            <button type="button" onclick="switchUserTab('pengaturan')" id="btn-utab-pengaturan" class="user-tab-btn px-5 py-3 text-sm font-bold text-gray-400 hover:text-white whitespace-nowrap transition-colors"><i class="fa-solid fa-gear mr-2"></i>Pengaturan Akun</button>
+        <div class="tk-user-menu flex overflow-x-auto gap-2 mb-8 custom-scroll">
+            <button type="button" onclick="switchUserTab('overview')" id="btn-utab-overview" class="user-tab-btn active px-5 py-3 text-sm font-bold whitespace-nowrap transition-colors"><i class="fa-solid fa-house mr-2"></i>Beranda</button>
+            <button type="button" onclick="switchUserTab('tiket')" id="btn-utab-tiket" class="user-tab-btn px-5 py-3 text-sm font-bold whitespace-nowrap transition-colors"><i class="fa-solid fa-ticket mr-2"></i>Tiket Saya</button>
+            <button type="button" onclick="switchUserTab('riwayat')" id="btn-utab-riwayat" class="user-tab-btn px-5 py-3 text-sm font-bold whitespace-nowrap transition-colors"><i class="fa-solid fa-clock-rotate-left mr-2"></i>Riwayat Transaksi</button>
+            <button type="button" onclick="switchUserTab('pengaturan')" id="btn-utab-pengaturan" class="user-tab-btn px-5 py-3 text-sm font-bold whitespace-nowrap transition-colors"><i class="fa-solid fa-gear mr-2"></i>Pengaturan Akun</button>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div class="lg:col-span-3 space-y-8">
                 
                 <div id="utab-overview" class="user-tab-content block">
-                    <div class="glass-card rounded-2xl p-6 border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.1)] mb-8 flex items-start gap-4">
+                    <div class="tk-security-card glass-card rounded-2xl p-6 mb-8 flex items-start gap-4">
                         <div class="text-amber-500 text-3xl"><i class="fa-solid fa-shield-halved"></i></div>
                         <div>
                             <h3 class="text-amber-500 font-bold text-lg mb-1">Peringatan Keamanan</h3>
@@ -428,7 +435,7 @@
 
                 <div id="utab-riwayat" class="user-tab-content hidden">
                     <h2 class="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2"><i class="fa-solid fa-clock-rotate-left dynamic-text-primary mr-2"></i> Riwayat Pembelian Selesai</h2>
-                    <div class="glass-card rounded-2xl p-6">
+                    <div class="tk-transaction-panel glass-card rounded-2xl p-6">
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-sm text-gray-300 whitespace-nowrap">
                                 <thead class="text-xs text-gray-400 uppercase bg-dark/80 border-b border-white/10">
@@ -445,7 +452,7 @@
 
                 <div id="utab-pengaturan" class="user-tab-content hidden">
                     <h2 class="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2"><i class="fa-solid fa-user-gear dynamic-text-primary mr-2"></i> Pengaturan Akun</h2>
-                    <div class="glass-card rounded-2xl p-6 border border-white/5 bg-dark/50 max-w-md">
+                    <div class="tk-account-panel glass-card rounded-2xl p-6 max-w-xl">
                         <form onsubmit="handleUserUpdateAccount(event); return false;" class="space-y-4">
                             <div>
                                 <label class="text-xs text-gray-400">Ganti Username Anda</label>
@@ -991,9 +998,9 @@
                 </div>
 
                 <div id="tab-event" class="admin-tab">
-                    <div class="glass-card rounded-2xl p-6">
+                    <div class="tk-admin-events-panel glass-card rounded-2xl p-6">
                         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-6">
-                            <div><h2 class="text-2xl font-bold"><i class="fa-solid fa-calendar-days text-amber-500 mr-2"></i> Manajemen Event</h2><p id="admin-event-list-label" class="text-sm text-amber-400 mt-1 hidden">Daftar Semua Event</p><p class="text-xs text-gray-400 mt-1">Vendor hanya dapat mengedit atau menghapus event miliknya sendiri. Admin utama dapat melihat semua event dan menghapus event tertentu saja.</p></div>
+                            <div><h2 class="text-2xl font-bold"><i class="fa-solid fa-calendar-days text-amber-500 mr-2"></i> Manajemen Event</h2><p id="admin-event-list-label" class="text-sm text-amber-400 mt-1 hidden">Daftar Semua Event</p><p class="text-xs text-gray-400 mt-1">Setiap Vendor dapat membuat, mengedit, dan menghapus event miliknya sendiri. Super Admin dapat mengelola seluruh event.</p></div>
                             <div class="flex flex-wrap gap-3">
                                 <button type="button" onclick="openModal('add-event-modal'); document.getElementById('form-add-event').reset(); document.getElementById('ev-kategori-custom').classList.add('hidden'); document.getElementById('ev-sport-season-box').classList.add('hidden'); document.getElementById('btn-save-event').innerText = 'Publish Event'; window.editEventKey=null; document.getElementById('ev-fasilitas').classList.add('hidden'); document.getElementById('ev-custom-form-box').classList.add('hidden'); document.getElementById('ev-use-custom-form').checked = false; document.getElementById('ev-use-tribun').checked = false; document.getElementById('ev-enable-raffle').checked = false; document.getElementById('ev-tribun-box').classList.add('hidden'); document.getElementById('ev-tribun-list').innerHTML = '';" class="glow-button text-dark font-bold px-4 py-2 rounded-lg text-sm cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.3)]"><i class="fa-solid fa-plus mr-1"></i> Tambah Event</button>
                             </div>

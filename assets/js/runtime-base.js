@@ -16,6 +16,24 @@
                 return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[m];
             });
         };
+        window.safeImageUrl = function(value, fallback = '') {
+            const raw = (value || '').toString().trim();
+            if (!raw) return fallback;
+            try {
+                const parsed = new URL(raw, window.location.href);
+                if (parsed.protocol === 'https:' || parsed.protocol === 'http:') return parsed.href;
+            } catch (e) {}
+            return fallback;
+        };
+        window.safeExternalUrl = function(value, fallback = '#') {
+            const raw = (value || '').toString().trim();
+            if (!raw) return fallback;
+            try {
+                const parsed = new URL(raw, window.location.href);
+                if (parsed.protocol === 'https:' || parsed.protocol === 'http:') return parsed.href;
+            } catch (e) {}
+            return fallback;
+        };
         window.getUpgradeReplacementMap = function(tickets = {}) {
             const replacementMap = {};
             Object.entries(tickets || {}).forEach(([replacementCode, ticket]) => {
@@ -148,25 +166,25 @@
             } catch(err) { }
         };
 
-        window.deleteEvent = function(eventKey) {
+        window.deleteEvent = async function(eventKey) {
             if (!eventKey || !window.db) return;
-            const ev = window.eventDataMap?.[eventKey] || {};
-            const ownerId = ev.ownerId || 'SUPER_ADMIN';
-            if (!window.isSuperAdmin && ownerId !== window.currentUserData?.uid) {
-                Toast.fire({ icon: 'error', title: 'Hanya admin utama atau pemilik event yang bisa menghapus event ini.' });
-                return;
+            try {
+                const eventSnap = await window.db.ref(`events/${eventKey}`).once('value');
+                const ev = eventSnap.val();
+                if (!ev) throw new Error('Event sudah tidak tersedia.');
+                const ownerId = ev.ownerId || 'SUPER_ADMIN';
+                if (!window.isSuperAdmin && (!window.isVendor || ownerId !== window.currentUserData?.uid)) {
+                    throw new Error('Vendor hanya dapat menghapus event miliknya sendiri.');
+                }
+                if (!confirm(`Hapus event "${ev.title || 'Event'}"? Tindakan ini tidak dapat dibatalkan.`)) return;
+                await window.db.ref(`events/${eventKey}`).remove();
+                if (window.eventDataMap) delete window.eventDataMap[eventKey];
+                if (window.currentViewingEventId === eventKey) window.currentViewingEventId = null;
+                window.refreshDashboardAfterDataMutation?.();
+                Toast.fire({ icon: 'success', title: 'Event berhasil dihapus.' });
+            } catch (err) {
+                Toast.fire({ icon: 'error', title: err.message || 'Gagal menghapus event.' });
             }
-            if (!confirm('Hapus event ini?')) return;
-            window.db.ref(`events/${eventKey}`).remove()
-                .then(() => {
-                    if (window.eventDataMap) delete window.eventDataMap[eventKey];
-                    if (window.currentViewingEventId === eventKey) window.currentViewingEventId = null;
-                    window.refreshDashboardAfterDataMutation?.();
-                    Toast.fire({ icon: 'success', title: 'Event berhasil dihapus.' });
-                })
-                .catch(err => {
-                    Toast.fire({ icon: 'error', title: err.message || 'Gagal menghapus event.' });
-                });
         };
 
         window.refreshDashboardAfterDataMutation = function() {
@@ -2833,6 +2851,7 @@
                             if(nlBtn) nlBtn.classList.add('hidden'); if(nrBtn) nrBtn.classList.add('hidden'); if(nloBtn) nloBtn.classList.remove('hidden');
                             if(nUserG) { nUserG.classList.remove('hidden'); nUserG.innerHTML = `Halo, <span class="font-bold text-white">${(data.nama || 'User').split(' ')[0]}</span>`; }
                             safeSetValue('user-set-username', data.username || '');
+                            safeSetText('user-dashboard-name', data.nama || 'Pengguna');
 
                             const userRole = (data.role || 'User').toString();
                             const normalizedRole = userRole.trim().toLowerCase();
@@ -3587,12 +3606,21 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
                 const processEvents = () => {
                     const lastPage = localStorage.getItem('beetix_last_page');
-                    if (lastPage === 'event-detail' && document.getElementById('co-evid').value === "") { showPage('home'); }
+                    if (lastPage === 'event-detail' && !document.getElementById('co-evid')?.value) { showPage('home'); }
 
-                    keys.reverse().forEach(k => {
+                    keys.slice().reverse().forEach(k => {
                         const ev = data[k]; if(!ev) return;
                         const tiket = ev.tiket || {}; let lowestP = Infinity;
-                        const theOwner = ev.ownerId || 'SUPER_ADMIN'; 
+                        const theOwner = ev.ownerId || 'SUPER_ADMIN';
+                        const safeEventKey = escapeHtml(k);
+                        const safeTitle = escapeHtml(ev.title || 'Event');
+                        const safeCategory = escapeHtml(ev.kategori || 'Event');
+                        const safeOrgName = escapeHtml(ev.org_name || 'EO Resmi');
+                        const safeDate = escapeHtml(ev.date || '-');
+                        const safeTime = escapeHtml(ev.time || '-');
+                        const safeLocation = escapeHtml(ev.location || '-');
+                        const safeCover = window.safeImageUrl(ev.image, 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30');
+                        const safeOrgLogo = window.safeImageUrl(ev.org_logo, '');
 
                         let totalAdminK = ev.total_kuota || 'Unlimited'; 
                         let sisaAdminK = totalAdminK !== 'Unlimited' ? (totalAdminK - (ev.sold || 0)) : 'Unlimited';
@@ -3602,9 +3630,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         const canManageEvent = window.isSuperAdmin || theOwner === window.currentUserData?.uid;
                         if (canManageEvent) {
                             adminEventsCount++;
-                            const canEdit = theOwner === window.currentUserData?.uid || (window.isSuperAdmin && theOwner === 'SUPER_ADMIN');
-                            const editButton = canEdit ? `<button type="button" onclick="openEditEvent('${k}')" class="text-blue-400 mr-3 cursor-pointer"><i class="fa-solid fa-pen"></i></button>` : '';
-                            const deleteButton = `<button type="button" onclick="window.deleteEvent('${k}')" class="text-red-400 cursor-pointer"><i class="fa-solid fa-trash"></i></button>`;
+                            const canEdit = window.isSuperAdmin || theOwner === window.currentUserData?.uid;
+                            const editButton = canEdit ? `<button type="button" onclick="openEditEvent('${safeEventKey}')" class="tk-event-action tk-event-action-edit" title="Edit event"><i class="fa-solid fa-pen-to-square"></i><span>Edit</span></button>` : '';
+                            const deleteButton = `<button type="button" onclick="window.deleteEvent('${safeEventKey}')" class="tk-event-action tk-event-action-delete" title="Hapus event"><i class="fa-solid fa-trash"></i><span>Hapus</span></button>`;
                             actButtons = `${editButton}${deleteButton}`;
                         } else {
                             actButtons = `<span class="text-[10px] text-gray-500 bg-white/5 px-2 py-1 rounded" title="Hanya pemilik event atau admin utama dapat menghapus"><i class="fa-solid fa-lock text-gray-400"></i> Hanya Pemilik</span>`;
@@ -3612,7 +3640,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         
                         const showInAdminEvents = window.isSuperAdmin || theOwner === window.currentUserData?.uid;
                         if (showInAdminEvents) {
-                            if(admT) admT.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3">${ev.title || 'Event'}</td><td class="px-4 py-3 text-xs text-blue-400">${ev.kategori || 'Event'}</td><td class="px-4 py-3 text-xs text-gray-400">${theOwner === 'SUPER_ADMIN' ? 'Super Admin' : (ev.org_name || 'Vendor')}${ownerLabel}</td><td class="px-4 py-3 text-xs text-green-400">Aktif</td><td class="px-4 py-3 text-right">${actButtons}</td></tr>`;
+                            if(admT) admT.innerHTML += `<tr class="tk-admin-event-row border-b border-white/5"><td class="px-4 py-3"><strong>${safeTitle}</strong></td><td class="px-4 py-3 text-xs text-cyan-300">${safeCategory}</td><td class="px-4 py-3 text-xs text-gray-300">${theOwner === 'SUPER_ADMIN' ? 'Super Admin' : safeOrgName}${ownerLabel}</td><td class="px-4 py-3 text-xs"><span class="tk-status-live"><i class="fa-solid fa-circle"></i> Aktif</span></td><td class="px-4 py-3"><div class="tk-event-actions">${actButtons}</div></td></tr>`;
                         }
                         
                         if (tiket.reg_eco_q !== undefined) {
@@ -3647,26 +3675,27 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                                 let sisa = q - sold;
                                 let statusColor = sisa > 0 ? 'text-green-400 border-green-500/30' : 'text-red-400 border-red-500/30';
                                 let sisaText = sisa > 0 ? `${sisa}/${q}` : 'HABIS';
-                                ticketInfoHtml += `<div class="flex justify-between items-center text-[9px] bg-dark/50 border ${statusColor} px-1.5 py-1 rounded"><span class="text-gray-300 font-bold truncate mr-1">${cat.label}</span><span class="font-black ${statusColor.split(' ')[0]} whitespace-nowrap">${sisaText}</span></div>`;
+                                ticketInfoHtml += `<div class="flex justify-between items-center text-[9px] bg-dark/50 border ${statusColor} px-1.5 py-1 rounded"><span class="text-gray-300 font-bold truncate mr-1">${escapeHtml(cat.label)}</span><span class="font-black ${statusColor.split(' ')[0]} whitespace-nowrap">${sisaText}</span></div>`;
                             }
                         });
                         ticketInfoHtml += '</div>';
                         if (!hasTickets) ticketInfoHtml = '';
 
                         if(pubC) pubC.innerHTML += `
-                        <div class="min-w-[260px] md:min-w-[300px] snap-center glass-card rounded-2xl overflow-hidden flex-shrink-0 border border-white/10 cursor-pointer transition-all flex flex-col group hover:-translate-y-1 hover:border-amber-500/50 hover:shadow-[0_8px_30px_rgba(245,158,11,0.15)]" onclick="window.openEventDetailPage('${k}')">
-                            <div class="h-40 overflow-hidden relative bg-darker">
+                        <article class="tk-event-card min-w-[270px] md:min-w-[320px] snap-center glass-card overflow-hidden flex-shrink-0 cursor-pointer flex flex-col group" onclick="window.openEventDetailPage('${safeEventKey}')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openEventDetailPage('${safeEventKey}')}" aria-label="Buka event ${safeTitle}">
+                            <div class="tk-event-cover h-44 overflow-hidden relative">
                                 <div class="absolute inset-0 bg-gradient-to-t from-darker via-transparent to-transparent z-10 opacity-70"></div>
-                                <img src="${ev.image || 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30'}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Cover">
+                                <img src="${safeCover}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Cover ${safeTitle}" loading="lazy" referrerpolicy="no-referrer">
+                                <div class="tk-event-category">${safeCategory}</div>
                                 <div class="absolute top-2 right-2 z-20 bg-dark/80 backdrop-blur-sm border border-white/10 text-[10px] px-2 py-1 rounded-md text-gray-300 font-bold tracking-wide shadow-lg">
                                     <i class="fa-solid fa-ticket text-amber-500 mr-1"></i> SISA: <span class="text-white">${sisaAdminK}</span>
                                 </div>
                             </div>
                             <div class="p-4 flex-1 flex flex-col relative z-20">
-                                <h3 class="font-bold text-white text-base md:text-lg leading-tight mb-3 line-clamp-2">${ev.title || 'Event'}</h3>
+                                <h3 class="font-bold text-white text-base md:text-lg leading-tight mb-3 line-clamp-2">${safeTitle}</h3>
                                 <div class="space-y-1.5 mb-4">
-                                    <div class="flex items-center text-[11px] text-gray-400 font-medium"><i class="fa-regular fa-calendar text-blue-400 w-4 text-center mr-1"></i> <span class="truncate">${ev.date || '-'} • ${ev.time || '-'}</span></div>
-                                    <div class="flex items-center text-[11px] text-gray-400 font-medium"><i class="fa-solid fa-location-dot text-red-400 w-4 text-center mr-1"></i> <span class="truncate">${ev.location || '-'}</span></div>
+                                    <div class="flex items-center text-[11px] text-gray-400 font-medium"><i class="fa-regular fa-calendar text-blue-400 w-4 text-center mr-1"></i> <span class="truncate">${safeDate} • ${safeTime}</span></div>
+                                    <div class="flex items-center text-[11px] text-gray-400 font-medium"><i class="fa-solid fa-location-dot text-red-400 w-4 text-center mr-1"></i> <span class="truncate">${safeLocation}</span></div>
                                 </div>
                                 ${ticketInfoHtml}
                                 <div class="mt-auto">
@@ -3674,15 +3703,15 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                                     <div class="flex items-center justify-between">
                                         <div class="flex items-center max-w-[55%]">
                                             <div class="w-7 h-7 rounded-full bg-darker border border-white/10 flex items-center justify-center text-[10px] font-bold text-gray-400 mr-2 overflow-hidden shrink-0">
-                                                ${ev.org_logo ? `<img src="${ev.org_logo}" class="w-full h-full object-cover">` : `<i class="fa-solid fa-building"></i>`}
+                                                ${safeOrgLogo ? `<img src="${safeOrgLogo}" class="w-full h-full object-cover" alt="Logo ${safeOrgName}" referrerpolicy="no-referrer">` : `<i class="fa-solid fa-building"></i>`}
                                             </div>
-                                            <p class="text-[11px] font-medium text-gray-300 truncate">${ev.org_name || 'EO Resmi'}</p>
+                                            <p class="text-[11px] font-medium text-gray-300 truncate">${safeOrgName}</p>
                                         </div>
-                                        <button class="bg-amber-500/20 hover:bg-amber-500 text-amber-500 hover:text-dark px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-amber-500/50 shadow-sm shrink-0">Beli Tiket</button>
+                                        <button type="button" class="tk-event-buy"><span>Beli Tiket</span><i class="fa-solid fa-arrow-right"></i></button>
                                     </div>
                                 </div>
                             </div>
-                        </div>`;
+                        </article>`;
                     });
 
                     safeSetText('dash-events', adminEventsCount);
@@ -4291,6 +4320,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if(window.activeVendorDashId) window.openVendorDetail(window.activeVendorDashId);
         }
 
+        const escapeDashboardHtml = (value) => (value ?? '').toString().replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+
         window.normalizeDepositCategory = function(value) {
             return (value || '').toString().trim().toLowerCase();
         };
@@ -4507,9 +4539,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         let transferBtnHtml = '';
                         let upgradeBtnHtml = '';
                         if (ticketEntry.status === 'ACTIVE' && !isUpgraded && showActionButtons && !isSponsor && !isTerusan) {
-                            transferBtnHtml = `<button type="button" onclick="openTransferTicketModal('${k}', '${ticketEntry.code}', '${ticketEntry.eventName}')" class="border border-green-500 text-green-500 hover:bg-green-500/10 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"><i class="fa-solid fa-share-nodes mr-1"></i> Transfer</button>`;
+                            transferBtnHtml = `<button type="button" onclick="openTransferTicketModal('${escapeDashboardHtml(k)}', '${escapeDashboardHtml(ticketEntry.code || '')}', decodeURIComponent('${encodeURIComponent(ticketEntry.eventName || '')}'))" class="border border-green-500 text-green-500 hover:bg-green-500/10 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"><i class="fa-solid fa-share-nodes mr-1"></i> Transfer</button>`;
                             if (window.canUpgradeTicketCategory(ticketEntry.category)) {
-                                upgradeBtnHtml = `<button type="button" onclick="openUpgradeTicketModal('${k}')" class="border border-amber-500 text-amber-500 hover:bg-amber-500/10 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"><i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> Upgrade</button>`;
+                                upgradeBtnHtml = `<button type="button" onclick="openUpgradeTicketModal('${escapeDashboardHtml(k)}')" class="border border-amber-500 text-amber-500 hover:bg-amber-500/10 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"><i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> Upgrade</button>`;
                             }
                         }
                         const isLegacySplit = ticketEntry.virtualSeatSplit === true;
@@ -4523,9 +4555,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         } else if (ticketEntry.status === 'SUSPENDED') {
                             actionBtnHtml = `<button type="button" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-not-allowed opacity-60" disabled>Ditangguhkan</button>`;
                         } else if (isLegacySplit) {
-                            actionBtnHtml = `<button type="button" onclick="openLegacySplitTicket('${k}', '${ticketEntry.selectedSeat}')" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">Lihat Tiket</button>`;
+                            actionBtnHtml = `<button type="button" onclick="openLegacySplitTicket('${escapeDashboardHtml(k)}', decodeURIComponent('${encodeURIComponent(ticketEntry.selectedSeat || '')}'))" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">Lihat Tiket</button>`;
                         } else {
-                            actionBtnHtml = `<button type="button" onclick="viewTicket('${k}')" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">Lihat Tiket</button>`;
+                            actionBtnHtml = `<button type="button" onclick="viewTicket('${escapeDashboardHtml(k)}')" class="glow-button px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">Lihat Tiket</button>`;
                         }
                         let transferredBadgeHtml = isTransferred ? `<div class="bg-gray-600 text-white font-bold px-3 py-1 text-xs rounded-full mb-2 inline-block"><i class="fa-solid fa-right-left mr-1"></i> TRANSFER</div>` : '';
                         const upgradedBadgeHtml = isUpgraded ? `<div class="bg-red-600/90 text-white font-bold px-3 py-1 text-xs rounded-full mb-2 inline-block border border-red-300/30"><i class="fa-solid fa-lock mr-1"></i> DI-UPGRADE</div>` : '';
@@ -4536,8 +4568,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         let cardOpacity = isUpgraded ? 'opacity-55 grayscale border-red-500/40 select-none' : ((isTransferred || isTransferPending) ? 'opacity-60' : '');
                         let seatInfo = ticketEntry.selectedTribun ? `<p class="text-xs text-gray-300 mb-2">Tribun: <span class="text-white font-semibold">${ticketEntry.selectedTribun}</span>${ticketEntry.selectedSeat ? ` • Kursi: <span class="text-white font-semibold">${ticketEntry.selectedSeat}</span>` : ''}</p>` : '';
                         const ticketCodeDisplay = ticketEntry.virtualSeatSplit ? (ticketEntry.virtualCode || ticketEntry.code) : ticketEntry.code;
-                        const legacyNote = ticketEntry.virtualSeatSplit ? `<p class="text-xs text-emerald-300 mb-2">(Tiket virtual per kursi dari data lama, pemindaian/transfer berlaku pada kode asli ${ticketEntry.virtualParentCode})</p>` : '';
-                        c.innerHTML += `<div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden ${cardOpacity}" ${isUpgraded ? 'aria-disabled="true" data-ticket-locked="upgrade"' : ''}>${cardOverlayHtml}<div class="absolute top-0 right-0 bg-amber-500 text-dark font-bold px-3 py-1 text-xs rounded-bl-lg">${ticketEntry.category} ${extraLabel}</div>${upgradedBadgeHtml}${transferredBadgeHtml}<h3 class="font-bold text-lg mb-1 pr-20">${ticketEntry.eventName}</h3><p class="text-xs text-gray-400 mb-1">Kode: <span class="text-white font-mono bg-dark/50 px-2 py-0.5 rounded">${ticketCodeDisplay}</span></p>${seatInfo}${legacyNote}${upgradedInfoHtml}${transferredToHtml}${adminMsgHtml}<div class="flex justify-between items-center gap-2 mt-4"><div>${statusUi}</div><div class="flex gap-2">${transferBtnHtml}${upgradeBtnHtml}${actionBtnHtml}</div></div></div>`;
+                        const safeTicketEventName = escapeDashboardHtml(ticketEntry.eventName || 'Event');
+                        const safeTicketCategory = escapeDashboardHtml(ticketEntry.category || 'Tiket');
+                        const safeTicketCodeDisplay = escapeDashboardHtml(ticketCodeDisplay || '');
+                        const legacyNote = ticketEntry.virtualSeatSplit ? `<p class="text-xs text-emerald-300 mb-2">(Tiket virtual per kursi dari data lama, pemindaian/transfer berlaku pada kode asli ${escapeDashboardHtml(ticketEntry.virtualParentCode || '')})</p>` : '';
+                        c.innerHTML += `<article class="tk-ticket-card glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden ${cardOpacity}" ${isUpgraded ? 'aria-disabled="true" data-ticket-locked="upgrade"' : ''}>${cardOverlayHtml}<div class="tk-ticket-category absolute top-0 right-0 font-bold px-3 py-1 text-xs rounded-bl-lg">${safeTicketCategory} ${extraLabel}</div><div class="tk-ticket-symbol"><i class="fa-solid fa-ticket-simple"></i></div>${upgradedBadgeHtml}${transferredBadgeHtml}<h3 class="font-black text-lg mb-2 pr-20">${safeTicketEventName}</h3><p class="tk-ticket-code text-xs mb-2">Kode: <span>${safeTicketCodeDisplay}</span></p>${seatInfo}${legacyNote}${upgradedInfoHtml}${transferredToHtml}${adminMsgHtml}<div class="tk-ticket-actions flex justify-between items-center gap-2 mt-4"><div>${statusUi}</div><div class="flex flex-wrap justify-end gap-2">${transferBtnHtml}${upgradeBtnHtml}${actionBtnHtml}</div></div></article>`;
                     });
                 });
             });
@@ -4626,11 +4661,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if (!ev) return Swal.fire({icon: 'error', title: 'Data Hilang', background:'#1e293b', color:'#fff'});
             document.getElementById('det-agree').checked = false;
             safeSetText('det-title', ev.title || 'Event'); safeSetText('det-cat', ev.kategori || 'Event');
-            document.getElementById('det-banner').src = ev.banner || ev.image || 'https://via.placeholder.com/1200x400';
+            document.getElementById('det-banner').src = window.safeImageUrl(ev.banner || ev.image, 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30');
             safeSetText('det-date', ev.date || '-'); safeSetText('det-time', ev.time || '-'); safeSetText('det-loc', ev.location || '-');
             safeSetText('det-org-name', ev.org_name || ev.artis || 'Penyelenggara Resmi');
-            if(ev.org_logo) { document.getElementById('det-org-logo').src = ev.org_logo; document.getElementById('det-org-logo').classList.remove('hidden'); } else { document.getElementById('det-org-logo').classList.add('hidden'); }
-            if(ev.org_sosmed) { document.getElementById('det-org-sosmed').href = ev.org_sosmed; document.getElementById('det-org-sosmed').classList.remove('hidden'); } else { document.getElementById('det-org-sosmed').classList.add('hidden'); }
+            if(window.safeImageUrl(ev.org_logo, '')) { document.getElementById('det-org-logo').src = window.safeImageUrl(ev.org_logo, ''); document.getElementById('det-org-logo').classList.remove('hidden'); } else { document.getElementById('det-org-logo').classList.add('hidden'); }
+            if(window.safeExternalUrl(ev.org_sosmed, '') ) { document.getElementById('det-org-sosmed').href = window.safeExternalUrl(ev.org_sosmed, '#'); document.getElementById('det-org-sosmed').classList.remove('hidden'); } else { document.getElementById('det-org-sosmed').classList.add('hidden'); }
             safeSetHTML('det-desc', formatRichTextHtml(ev.desc || 'Belum ada deskripsi untuk acara ini.'));
             safeSetHTML('det-snk', formatRichTextHtml(ev.snk || 'Seluruh aturan mengikuti standar penyelenggara.'));
             if (ev.fasilitas && ev.fasilitas.trim() !== '') { document.getElementById('det-fasilitas-box').classList.remove('hidden'); safeSetHTML('det-fasilitas', formatRichTextHtml(ev.fasilitas)); } else { document.getElementById('det-fasilitas-box').classList.add('hidden'); }
@@ -7360,9 +7395,12 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         async function openEditEvent(k) { 
             try { 
                 const snap = await db.ref(`events/${k}`).once('value'); 
-                const ev = snap.val(); 
-                if(!ev) return; 
-                window.editEventKey = k; 
+                const ev = snap.val();
+                if(!ev) throw new Error('Event tidak ditemukan.');
+                const eventOwnerId = ev.ownerId || 'SUPER_ADMIN';
+                const canEditEvent = window.isSuperAdmin || (window.isVendor && eventOwnerId === window.currentUserData?.uid);
+                if (!canEditEvent) throw new Error('Anda hanya dapat mengedit event milik akun Vendor Anda sendiri.');
+                window.editEventKey = k;
                 
                 const modalTitle = document.getElementById('ev-modal-title');
                 const saveBtn = document.getElementById('btn-save-event');
@@ -7502,8 +7540,14 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
                 
                 openModal('add-event-modal'); 
-            } catch(e){ console.error(e); } 
+            } catch(e){
+                console.error(e);
+                window.editEventKey = null;
+                Toast.fire({ icon: 'error', title: e.message || 'Event tidak dapat dibuka untuk diedit.' });
+            }
         }
+
+        window.openEditEvent = openEditEvent;
 
         async function handleAddEvent(e) {
             e.preventDefault(); 
@@ -7540,9 +7584,16 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 let t_v_scan = t_v_enabled ? parseInt(document.getElementById('k-trs-vip-scan')?.value) || 0 : 0;
                 let t_k = p_q + e_q + v_q + vv_q + t_e_q + t_v_q; 
                 
-                let existingTiket = {}; 
-                if (window.editEventKey && window.eventDataMap && window.eventDataMap[window.editEventKey]) { 
-                    existingTiket = window.eventDataMap[window.editEventKey].tiket || {}; 
+                let existingTiket = {};
+                let existingEvent = null;
+                if (window.editEventKey) {
+                    const currentEventSnap = await window.db.ref(`events/${window.editEventKey}`).once('value');
+                    existingEvent = currentEventSnap.val();
+                    if (!existingEvent) throw new Error('Event yang akan diedit sudah tidak tersedia.');
+                    const existingOwnerId = existingEvent.ownerId || 'SUPER_ADMIN';
+                    const canUpdateEvent = window.isSuperAdmin || (window.isVendor && existingOwnerId === window.currentUserData?.uid);
+                    if (!canUpdateEvent) throw new Error('Akses ditolak: Vendor hanya dapat mengedit event miliknya sendiri.');
+                    existingTiket = existingEvent.tiket || {};
                 }
                 
                 const fasilCheckEl = document.getElementById('ev-has-fasilitas');
@@ -7553,10 +7604,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
                 
                 const ownerEl = document.getElementById('ev-owner');
-                let theOwnerId = 'SUPER_ADMIN';
+                let theOwnerId = existingEvent?.ownerId || 'SUPER_ADMIN';
                 if (window.isSuperAdmin && ownerEl && ownerEl.value.trim() !== '') {
                     theOwnerId = ownerEl.value.trim();
-                } else if (!window.isSuperAdmin && window.currentUserData) {
+                } else if (window.isVendor && window.currentUserData?.uid) {
                     theOwnerId = window.currentUserData.uid;
                 }
                 
@@ -7580,6 +7631,20 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         }
                     });
                 }
+
+                const soldChecks = [
+                    ['Presale', p_q, parseInt(existingTiket.presale_sold) || 0],
+                    ['Reguler', e_q, parseInt(existingTiket.reg_eco_sold) || 0],
+                    ['VIP', v_q, parseInt(existingTiket.reg_vip_sold) || 0],
+                    ['VVIP', vv_q, parseInt(existingTiket.reg_vvip_sold) || 0],
+                    ['Terusan Ekonomi', t_e_q, parseInt(existingTiket.trs_eco_sold) || 0],
+                    ['Terusan VIP', t_v_q, parseInt(existingTiket.trs_vip_sold) || 0]
+                ];
+                const invalidQuota = soldChecks.find(([, quota, sold]) => quota < sold);
+                if (invalidQuota) throw new Error(`Kuota ${invalidQuota[0]} tidak boleh lebih kecil dari tiket yang sudah terjual (${invalidQuota[2]}).`);
+                if (!(titleEl.value || '').trim()) throw new Error('Judul event wajib diisi.');
+                if (!(document.getElementById('ev-date')?.value || '').trim()) throw new Error('Tanggal event wajib diisi.');
+                if (!(document.getElementById('ev-location')?.value || '').trim()) throw new Error('Lokasi event wajib diisi.');
 
                 const payload = { 
                     kategori: kategoriVal, 
@@ -7651,10 +7716,12 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     status: 'ACTIVE' 
                 };
                 
-                if(window.editEventKey) { 
+                if(window.editEventKey) {
                     if (!window.db) throw new Error('Database tidak tersedia!');
-                    await window.db.ref(`events/${window.editEventKey}`).update(payload); 
-                    Toast.fire({ icon: 'success', title: 'Event diupdate!' }); 
+                    payload.updatedAt = firebase.database.ServerValue.TIMESTAMP;
+                    payload.updatedBy = window.currentUserData?.uid || '';
+                    await window.db.ref(`events/${window.editEventKey}`).update(payload);
+                    Toast.fire({ icon: 'success', title: 'Event berhasil diperbarui.' });
                 } else { 
                     if (!window.db) throw new Error('Database tidak tersedia!');
                     payload.createdAt = firebase.database.ServerValue.TIMESTAMP; 
