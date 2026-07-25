@@ -7,7 +7,7 @@
  */
 
 const CACHE_PREFIXES = ['btix-', 'tiketkaka-'];
-const CACHE_NAME = 'tiketkaka-v18-transfer-remove-old';
+const CACHE_NAME = 'tiketkaka-v19-transfer-permission-fix';
 
 const APP_SHELL = [
   './',
