@@ -7,7 +7,7 @@
  */
 
 const CACHE_PREFIXES = ['btix-', 'tiketkaka-'];
-const CACHE_NAME = 'tiketkaka-v26-vendor-logo-sales-analytics';
+const CACHE_NAME = 'tiketkaka-v27-admin-fix-vendor-edit';
 
 const APP_SHELL = [
   './',

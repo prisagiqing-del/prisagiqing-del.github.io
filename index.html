@@ -1084,7 +1084,7 @@
                     <div class="glass-card rounded-2xl p-6">
                         <div class="flex justify-between items-center mb-6">
                             <div><h2 class="text-2xl font-bold"><i class="fa-solid fa-building-user text-amber-500 mr-2"></i> Manajemen Vendor (EO)</h2><p class="text-sm text-gray-400 mt-1">Vendor dapat login, membuat event, dan mengelola tiket mereka sendiri secara terpisah.</p></div>
-                            <button type="button" onclick="document.getElementById('add-vendor-modal')?.querySelector('form')?.reset(); openModal('add-vendor-modal'); window.resetVendorLogoPreview?.()" class="glow-button text-dark font-bold px-4 py-2 rounded-lg text-sm cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.3)]"><i class="fa-solid fa-plus mr-1"></i> Buat Akun Vendor</button>
+                            <button type="button" onclick="window.resetVendorFormMode?.(); openModal('add-vendor-modal')" class="glow-button text-dark font-bold px-4 py-2 rounded-lg text-sm cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.3)]"><i class="fa-solid fa-plus mr-1"></i> Buat Akun Vendor</button>
                         </div>
                         <div class="overflow-x-auto"><table class="w-full text-left text-sm text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-dark/50 border-b border-white/10"><tr><th class="px-4 py-3">Logo</th><th class="px-4 py-3">Nama EO</th><th class="px-4 py-3">Username Login</th><th class="px-4 py-3 text-center">Fee Platform</th><th class="px-4 py-3 text-right">Aksi</th></tr></thead><tbody id="admin-vendor-table"></tbody></table></div>
                     </div>
@@ -1335,9 +1335,10 @@
         <div class="w-full max-w-md px-4 modal-content mb-10">
             <div class="glass-card rounded-2xl p-8 relative">
                 <button type="button" onclick="closeModal('add-vendor-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-red-400 cursor-pointer z-20 p-2"><i class="fa-solid fa-xmark text-xl"></i></button>
-                <h2 class="text-2xl font-bold mb-2 text-white"><i class="fa-solid fa-building-user text-amber-500 mr-2"></i> Buat Akun Vendor (EO)</h2>
+                <h2 id="vendor-modal-title" class="text-2xl font-bold mb-2 text-white"><i class="fa-solid fa-building-user text-amber-500 mr-2"></i> Buat Akun Vendor (EO)</h2>
                 <p class="text-xs text-gray-400 mb-6">Vendor akan memiliki dashboard tersendiri untuk mengelola event, keuangan, dan staff scanner mereka.</p>
                 <form onsubmit="handleAddVendor(event); return false;" class="space-y-4 relative z-10">
+                    <input type="hidden" id="vend-edit-id" value="">
                     <input type="text" id="vend-name" required class="w-full bg-darker border border-gray-600 rounded-lg p-3 text-white" placeholder="Nama Event Organizer (EO)">
                     <input type="text" id="vend-user" required class="w-full bg-darker border border-gray-600 rounded-lg p-3 text-white" placeholder="Username (tanpa spasi)">
                     <div class="tk-vendor-logo-field rounded-2xl border border-cyan-400/25 bg-cyan-400/5 p-4">
@@ -1354,7 +1355,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="relative"><input type="password" id="vend-pass" required class="w-full bg-darker border border-gray-600 rounded-lg p-3 text-white pr-10 w-full" placeholder="Password (Min 6 Karakter)"><button type="button" onclick="const p=document.getElementById('vend-pass'); p.type=p.type==='password'?'text':'password'; this.innerHTML = p.type==='password'?'<i class=\'fa-regular fa-eye\'></i>':'<i class=\'fa-regular fa-eye-slash\'></i>';" class="absolute right-3 top-3 text-gray-400 cursor-pointer z-20 p-1"><i class="fa-regular fa-eye"></i></button></div>
+                    <div id="vend-pass-wrap" class="relative"><input type="password" id="vend-pass" required class="w-full bg-darker border border-gray-600 rounded-lg p-3 text-white pr-10 w-full" placeholder="Password (Min 6 Karakter)"><button type="button" onclick="const p=document.getElementById('vend-pass'); p.type=p.type==='password'?'text':'password'; this.innerHTML = p.type==='password'?'<i class=\'fa-regular fa-eye\'></i>':'<i class=\'fa-regular fa-eye-slash\'></i>';" class="absolute right-3 top-3 text-gray-400 cursor-pointer z-20 p-1"><i class="fa-regular fa-eye"></i></button></div>
                     <div class="bg-dark p-3 rounded-lg border border-purple-500/30 shadow-inner mt-2 space-y-3">
                         <div>
                             <label class="text-xs text-purple-400 font-bold mb-1 block">Potongan Fee Platform (%)</label>

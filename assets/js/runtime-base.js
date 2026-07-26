@@ -3655,7 +3655,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 console.error("Gagal memuat setting:", err);
                 window.TiketKakaSplash?.markReady('settings');
             });
-        }// Make it globally accessible so deposit loading can trigger it
+        }
+// Make it globally accessible so deposit loading can trigger it
         window.listenToPublicEvents = function listenToPublicEvents() {
             if (window.publicEventsListening) return;
             window.publicEventsListening = true;
@@ -4121,7 +4122,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             const vendorLogoCell = safeVendorLogo
                                 ? `<img src="${safeVendorLogo}" alt="Logo ${escapeHtml(u.nama || 'Vendor')}" class="tk-vendor-logo-cell" referrerpolicy="no-referrer">`
                                 : `<div class="tk-vendor-logo-cell flex items-center justify-center text-cyan-300"><i class="fa-solid fa-store"></i></div>`;
-                            if (vt) vt.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3">${vendorLogoCell}</td><td class="px-4 py-3 font-bold text-amber-500">${escapeHtml(u.nama || 'Vendor')}</td><td class="px-4 py-3">${escapeHtml(u.username || '-')}</td><td class="px-4 py-3 text-center text-purple-400 font-bold bg-purple-500/10 rounded">${u.platform_fee || 0}%</td><td class="px-4 py-3 text-right"><button type="button" onclick="window.deleteVendorAccount('${k}')" class="text-red-400 cursor-pointer bg-red-500/20 px-3 py-1 rounded text-xs font-bold hover:bg-red-500 hover:text-white transition-colors"><i class="fa-solid fa-ban mr-1"></i> Banned & Hapus</button></td></tr>`;
+                            if (vt) vt.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3">${vendorLogoCell}</td><td class="px-4 py-3 font-bold text-amber-500">${escapeHtml(u.nama || 'Vendor')}</td><td class="px-4 py-3">${escapeHtml(u.username || '-')}</td><td class="px-4 py-3 text-center text-purple-400 font-bold bg-purple-500/10 rounded">${u.platform_fee || 0}%</td><td class="px-4 py-3 text-right"><div class="inline-flex gap-2"><button type="button" onclick="window.openEditVendorModal('${k}')" class="text-cyan-200 cursor-pointer bg-cyan-500/20 px-3 py-1 rounded text-xs font-bold hover:bg-cyan-500 hover:text-slate-950 transition-colors"><i class="fa-solid fa-pen-to-square mr-1"></i> Edit</button><button type="button" onclick="window.deleteVendorAccount('${k}')" class="text-red-400 cursor-pointer bg-red-500/20 px-3 py-1 rounded text-xs font-bold hover:bg-red-500 hover:text-white transition-colors"><i class="fa-solid fa-ban mr-1"></i> Banned & Hapus</button></div></td></tr>`;
                         }
                     }
                     else if(role.includes('Scanner')) {
@@ -10148,3 +10149,128 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             window.populateMainSalesAnalyticsFilters();
             window.renderAllSalesAnalytics();
         }, 350);
+
+        // Tiket Kaka v27: payment validation popup guard, Vendor editing, and silent waiting room UI.
+        window.WAITING_ROOM_AUDIO_ENABLED = false;
+        window.WAITING_ROOM_POPUP_ENABLED = false;
+        window.WAITING_ROOM_PUSH_ENABLED = false;
+        window.playQueueNotificationSound = function() { return false; };
+        window.sendPushNotification = function() { return false; };
+        window.requestNotificationPermission = function() { return false; };
+        window.showWaitingRoom = function() {
+            const overlay = document.getElementById('waiting-room-overlay');
+            overlay?.classList.remove('show');
+            const eventDetailPage = document.getElementById('page-event-detail');
+            if (eventDetailPage) eventDetailPage.style.display = '';
+            return false;
+        };
+
+        window.__paymentApprovalLocks = window.__paymentApprovalLocks || new Set();
+        window.__paymentApprovalToastKeys = window.__paymentApprovalToastKeys || new Set();
+        const __v27OriginalApprovePayment = typeof approvePayment === 'function' ? approvePayment : null;
+        if (__v27OriginalApprovePayment) {
+            approvePayment = async function(btn, key, uid, userName, evId, eventName, category, qty) {
+                const lockKey = String(key || '');
+                if (!lockKey) return;
+                if (window.__paymentApprovalLocks.has(lockKey)) return;
+                window.__paymentApprovalLocks.add(lockKey);
+                if (btn) btn.disabled = true;
+                try {
+                    await __v27OriginalApprovePayment(btn, key, uid, userName, evId, eventName, category, qty);
+                } finally {
+                    setTimeout(() => window.__paymentApprovalLocks.delete(lockKey), 1200);
+                }
+            };
+            window.approvePayment = approvePayment;
+        }
+
+        window.resetVendorFormMode = function() {
+            const form = document.getElementById('add-vendor-modal')?.querySelector('form');
+            form?.reset();
+            const editId = document.getElementById('vend-edit-id');
+            if (editId) editId.value = '';
+            const title = document.getElementById('vendor-modal-title');
+            if (title) title.innerHTML = '<i class="fa-solid fa-building-user text-amber-500 mr-2"></i> Buat Akun Vendor (EO)';
+            const userEl = document.getElementById('vend-user');
+            if (userEl) { userEl.disabled = false; userEl.required = true; userEl.classList.remove('opacity-60','cursor-not-allowed'); }
+            const passWrap = document.getElementById('vend-pass-wrap');
+            if (passWrap) passWrap.classList.remove('hidden');
+            const passEl = document.getElementById('vend-pass');
+            if (passEl) passEl.required = true;
+            const btn = document.getElementById('btn-save-vendor');
+            if (btn) btn.textContent = 'Buat Akun Vendor';
+            window.resetVendorLogoPreview?.();
+        };
+
+        window.openEditVendorModal = function(vendorId) {
+            if (!window.isSuperAdmin) return;
+            const vendor = window.usersMapCache?.[vendorId];
+            if (!vendor || vendor.role !== 'Vendor') return Toast.fire({ icon:'error', title:'Data Vendor tidak ditemukan.' });
+            window.resetVendorFormMode();
+            const editId = document.getElementById('vend-edit-id');
+            if (editId) editId.value = vendorId;
+            const title = document.getElementById('vendor-modal-title');
+            if (title) title.innerHTML = '<i class="fa-solid fa-pen-to-square text-cyan-400 mr-2"></i> Edit Vendor';
+            const nameEl = document.getElementById('vend-name');
+            const userEl = document.getElementById('vend-user');
+            const logoEl = document.getElementById('vend-logo-url');
+            const feeEl = document.getElementById('vend-fee');
+            const eoFeeEl = document.getElementById('vend-eo-fee');
+            if (nameEl) nameEl.value = vendor.nama || '';
+            if (userEl) { userEl.value = vendor.username || ''; userEl.disabled = true; userEl.required = false; userEl.classList.add('opacity-60','cursor-not-allowed'); }
+            if (logoEl) logoEl.value = vendor.logoUrl || vendor.vendorLogoUrl || '';
+            if (feeEl) feeEl.value = Number(vendor.platform_fee || 0);
+            if (eoFeeEl) eoFeeEl.value = Number(vendor.eo_fee || 0);
+            const passWrap = document.getElementById('vend-pass-wrap');
+            if (passWrap) passWrap.classList.add('hidden');
+            const passEl = document.getElementById('vend-pass');
+            if (passEl) { passEl.required = false; passEl.value = ''; }
+            const btn = document.getElementById('btn-save-vendor');
+            if (btn) btn.textContent = 'Simpan Perubahan Vendor';
+            window.previewVendorLogoUrl?.(logoEl?.value || '');
+            openModal('add-vendor-modal');
+        };
+
+        const __v27OriginalHandleAddVendor = window.handleAddVendor;
+        window.handleAddVendor = async function(e) {
+            e?.preventDefault?.();
+            const editId = document.getElementById('vend-edit-id')?.value || '';
+            if (!editId) return __v27OriginalHandleAddVendor?.(e);
+            const btn = document.getElementById('btn-save-vendor');
+            const originalHtml = btn?.innerHTML || '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Menyimpan...'; }
+            try {
+                if (!window.isSuperAdmin) throw new Error('Hanya Super Admin yang dapat mengedit Vendor.');
+                const vendor = window.usersMapCache?.[editId];
+                if (!vendor || vendor.role !== 'Vendor') throw new Error('Data Vendor tidak ditemukan.');
+                const vendorName = document.getElementById('vend-name')?.value.trim() || '';
+                const logoUrl = window.safeImageUrl(document.getElementById('vend-logo-url')?.value || '', '');
+                const fee = Math.min(100, Math.max(0, parseFloat(document.getElementById('vend-fee')?.value) || 0));
+                const eoFee = Math.min(100, Math.max(0, parseFloat(document.getElementById('vend-eo-fee')?.value) || 0));
+                if (!vendorName) throw new Error('Nama Event Organizer wajib diisi.');
+                if (!logoUrl) throw new Error('URL Logo Vendor wajib diisi.');
+                const imageInfo = await window.inspectRemoteImageDimensions(logoUrl);
+                if (imageInfo.width !== 800 || imageInfo.height !== 800) throw new Error(`Ukuran logo ${imageInfo.width} × ${imageInfo.height} px. Gunakan tepat 800 × 800 px.`);
+                const updates = {
+                    nama: vendorName,
+                    logoUrl,
+                    vendorLogoUrl: logoUrl,
+                    logoWidth: 800,
+                    logoHeight: 800,
+                    platform_fee: fee,
+                    eo_fee: eoFee,
+                    updatedAt: firebase.database.ServerValue.TIMESTAMP,
+                    updatedBy: window.currentUserData?.uid || ''
+                };
+                await db.ref(`users/${editId}`).update(updates);
+                window.usersMapCache[editId] = { ...vendor, ...updates, updatedAt: Date.now() };
+                closeModal('add-vendor-modal');
+                window.resetVendorFormMode();
+                window.updateVendorDashboardList?.();
+                Toast.fire({ icon:'success', title:'Data Vendor berhasil diperbarui.' });
+            } catch (err) {
+                Toast.fire({ icon:'error', title:err.message || 'Gagal memperbarui Vendor.' });
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = originalHtml || 'Simpan Perubahan Vendor'; }
+            }
+        };
