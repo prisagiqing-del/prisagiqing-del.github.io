@@ -207,7 +207,43 @@
                 if (existingMessage) existingMessage.textContent = message;
                 return;
             }
-            window.__tkStableMutationScrollY = window.scrollY || 0;
+
+            const scrollY = Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
+            const bodyStyle = document.body.style;
+            const htmlStyle = document.documentElement.style;
+            window.__tkStableMutationViewport = {
+                scrollY,
+                body: {
+                    position: bodyStyle.position,
+                    top: bodyStyle.top,
+                    left: bodyStyle.left,
+                    right: bodyStyle.right,
+                    width: bodyStyle.width,
+                    overflow: bodyStyle.overflow,
+                    touchAction: bodyStyle.touchAction,
+                    paddingRight: bodyStyle.paddingRight
+                },
+                html: {
+                    overflow: htmlStyle.overflow,
+                    overscrollBehavior: htmlStyle.overscrollBehavior
+                }
+            };
+
+            // Lock the viewport itself, not only scrolling. This prevents the mobile page
+            // from jumping when Firebase listeners, SweetAlert, charts, and modal classes
+            // update at nearly the same time during an upgrade or transfer.
+            const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+            bodyStyle.position = 'fixed';
+            bodyStyle.top = `${-scrollY}px`;
+            bodyStyle.left = '0';
+            bodyStyle.right = '0';
+            bodyStyle.width = '100%';
+            bodyStyle.overflow = 'hidden';
+            bodyStyle.touchAction = 'none';
+            if (scrollbarWidth > 0) bodyStyle.paddingRight = `${scrollbarWidth}px`;
+            htmlStyle.overflow = 'hidden';
+            htmlStyle.overscrollBehavior = 'none';
+
             document.documentElement.classList.add('tk-ui-mutation');
             document.body.classList.add('tk-ui-mutation');
             let overlay = document.getElementById('tk-mutation-overlay');
@@ -229,17 +265,42 @@
             if (!window.__tkStableMutationDepth) return;
             window.__tkStableMutationDepth = Math.max(0, window.__tkStableMutationDepth - 1);
             if (window.__tkStableMutationDepth > 0) return;
-            const delay = Math.max(0, Number(options.delay ?? 120) || 0);
+
+            const delay = Math.max(0, Number(options.delay ?? 100) || 0);
             await window.waitForUiFrames(2);
             if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+
             const overlay = document.getElementById('tk-mutation-overlay');
             if (overlay) overlay.classList.add('is-hiding');
-            await new Promise(resolve => setTimeout(resolve, 180));
+            await new Promise(resolve => setTimeout(resolve, 150));
+
+            const viewport = window.__tkStableMutationViewport || {};
+            const bodySaved = viewport.body || {};
+            const htmlSaved = viewport.html || {};
+            const bodyStyle = document.body.style;
+            const htmlStyle = document.documentElement.style;
+
             document.documentElement.classList.remove('tk-ui-mutation');
             document.body.classList.remove('tk-ui-mutation');
             if (overlay) overlay.classList.remove('show', 'is-hiding');
-            const restoreScroll = Number(window.__tkStableMutationScrollY || 0);
-            requestAnimationFrame(() => window.scrollTo({ top: restoreScroll, left: 0, behavior: 'auto' }));
+
+            bodyStyle.position = bodySaved.position || '';
+            bodyStyle.top = bodySaved.top || '';
+            bodyStyle.left = bodySaved.left || '';
+            bodyStyle.right = bodySaved.right || '';
+            bodyStyle.width = bodySaved.width || '';
+            bodyStyle.overflow = bodySaved.overflow || '';
+            bodyStyle.touchAction = bodySaved.touchAction || '';
+            bodyStyle.paddingRight = bodySaved.paddingRight || '';
+            htmlStyle.overflow = htmlSaved.overflow || '';
+            htmlStyle.overscrollBehavior = htmlSaved.overscrollBehavior || '';
+
+            const restoreScroll = Math.max(0, Number(viewport.scrollY || 0));
+            window.__tkStableMutationViewport = null;
+            // Restore once, without animation. Calling scrollTo inside multiple rAF cycles
+            // was one source of the visible "shake" on mobile.
+            window.scrollTo(0, restoreScroll);
+            await window.waitForUiFrames(1);
         };
 
         window.refreshDashboardAfterDataMutation = function() {
@@ -4526,6 +4587,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             try {
                 if (window.__userDashboardPaymentQuery) window.__userDashboardPaymentQuery.off('value');
             } catch (e) { console.warn('[USER DASHBOARD] Gagal melepas listener pembayaran:', e); }
+            try { window.__userDashboardRemoteUpgradeCleanup?.(); } catch (e) {}
+            window.__userDashboardRemoteUpgradeCleanup = null;
             window.__userDashboardTicketQuery = null;
             window.__userDashboardPaymentQuery = null;
             window.__userDashboardUid = null;
@@ -4549,6 +4612,61 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 if (initialTicketRendered && initialPaymentRendered && resolveDashboardReady) {
                     resolveDashboardReady(true);
                     resolveDashboardReady = null;
+                }
+            };
+
+            // Coalesce ticket and payment DOM writes into one frame. An upgrade changes
+            // payment + old ticket + new ticket almost simultaneously; committing each
+            // listener separately made the mobile dashboard visibly jump several times.
+            let queuedTicketCommit = null;
+            let queuedPaymentCommit = null;
+            let dashboardCommitTimer = null;
+            const queueDashboardCommit = (kind, commit) => {
+                if (kind === 'ticket') queuedTicketCommit = commit;
+                if (kind === 'payment') queuedPaymentCommit = commit;
+                clearTimeout(dashboardCommitTimer);
+                dashboardCommitTimer = setTimeout(() => {
+                    (window.requestAnimationFrame || (callback => setTimeout(callback, 0)))(() => {
+                        if (dashboardGeneration !== window.__userDashboardGeneration || window.__userDashboardUid !== uid) return;
+                        const ticketCommit = queuedTicketCommit;
+                        const paymentCommit = queuedPaymentCommit;
+                        queuedTicketCommit = null;
+                        queuedPaymentCommit = null;
+                        try { ticketCommit?.(); } catch (err) { console.warn('[USER DASHBOARD] Ticket commit failed:', err); }
+                        try { paymentCommit?.(); } catch (err) { console.warn('[USER DASHBOARD] Payment commit failed:', err); }
+                    });
+                }, 140);
+            };
+
+            let remoteUpgradeSyncActive = false;
+            let remoteUpgradeFallbackTimer = null;
+            let remoteUpgradeFinishTimer = null;
+            const userDashboardVisible = () => document.getElementById('page-user-dash')?.classList.contains('active');
+            const finishRemoteUpgradeSync = (delay = 700) => {
+                if (!remoteUpgradeSyncActive) return;
+                clearTimeout(remoteUpgradeFinishTimer);
+                remoteUpgradeFinishTimer = setTimeout(async () => {
+                    if (!remoteUpgradeSyncActive) return;
+                    remoteUpgradeSyncActive = false;
+                    clearTimeout(remoteUpgradeFallbackTimer);
+                    remoteUpgradeFallbackTimer = null;
+                    try { await window.endStableUiMutation?.({ delay: 80 }); } catch (e) {}
+                }, delay);
+            };
+            const startRemoteUpgradeSync = () => {
+                if (remoteUpgradeSyncActive || !userDashboardVisible()) return;
+                remoteUpgradeSyncActive = true;
+                window.beginStableUiMutation?.('Menyelesaikan upgrade dan memperbarui tiket...');
+                clearTimeout(remoteUpgradeFallbackTimer);
+                remoteUpgradeFallbackTimer = setTimeout(() => finishRemoteUpgradeSync(0), 9000);
+            };
+            window.__userDashboardRemoteUpgradeCleanup = () => {
+                clearTimeout(dashboardCommitTimer);
+                clearTimeout(remoteUpgradeFinishTimer);
+                clearTimeout(remoteUpgradeFallbackTimer);
+                if (remoteUpgradeSyncActive) {
+                    remoteUpgradeSyncActive = false;
+                    Promise.resolve(window.endStableUiMutation?.({ delay: 0 })).catch(() => {});
                 }
             };
 
@@ -4603,8 +4721,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 // remain visible as a locked, non-clickable audit card.
                 const keys = Object.keys(canonicalDisplayData).filter(k => canonicalDisplayData[k]?.status !== 'TRANSFERRED');
                 if(keys.length === 0) {
-                    c.innerHTML = '<div class="col-span-full text-center py-10 text-gray-500 border border-dashed border-white/10 rounded-xl">Belum ada tiket.</div>';
-                    markDashboardReady('ticket');
+                    const emptyTicketHtml = '<div class="col-span-full text-center py-10 text-gray-500 border border-dashed border-white/10 rounded-xl">Belum ada tiket.</div>';
+                    queueDashboardCommit('ticket', () => {
+                        c.innerHTML = emptyTicketHtml;
+                        markDashboardReady('ticket');
+                    });
                     return;
                 }
                 keys.reverse().forEach(k => {
@@ -4680,8 +4801,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         ticketCards.push(`<article class="tk-ticket-card glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden ${cardOpacity}" ${isUpgraded ? 'aria-disabled="true" data-ticket-locked="upgrade"' : ''}>${cardOverlayHtml}<div class="tk-ticket-category absolute top-0 right-0 font-bold px-3 py-1 text-xs rounded-bl-lg">${safeTicketCategory} ${extraLabel}</div><div class="tk-ticket-symbol"><i class="fa-solid fa-ticket-simple"></i></div>${upgradedBadgeHtml}${transferredBadgeHtml}<h3 class="font-black text-lg mb-2 pr-20">${safeTicketEventName}</h3><p class="tk-ticket-code text-xs mb-2">Kode: <span>${safeTicketCodeDisplay}</span></p>${seatInfo}${legacyNote}${upgradedInfoHtml}${transferredToHtml}${adminMsgHtml}<div class="tk-ticket-actions flex justify-between items-center gap-2 mt-4"><div>${statusUi}</div><div class="flex flex-wrap justify-end gap-2">${transferBtnHtml}${upgradeBtnHtml}${actionBtnHtml}</div></div></article>`);
                     });
                 });
-                c.innerHTML = ticketCards.join('');
-                markDashboardReady('ticket');
+                const nextTicketHtml = ticketCards.join('');
+                queueDashboardCommit('ticket', () => {
+                    c.innerHTML = nextTicketHtml;
+                    markDashboardReady('ticket');
+                });
             });
 
             const paymentQuery = db.ref('payments').orderByChild('uid').equalTo(uid);
@@ -4700,6 +4824,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const regularEntries = Object.entries(data)
                     .filter(([, p]) => p && (p.type || '').toString().toUpperCase() !== 'DEPOSIT')
                     .sort((a, b) => (Number(b[1]?.createdAt || 0) - Number(a[1]?.createdAt || 0)));
+                const hasUpgradeProcessing = regularEntries.some(([, p]) => (p.type || '').toString().toUpperCase() === 'UPGRADE' && (p.status || '').toString().toUpperCase() === 'PROCESSING');
+                if (hasUpgradeProcessing) startRemoteUpgradeSync();
+                else if (remoteUpgradeSyncActive) finishRemoteUpgradeSync();
                 let hasPending = false;
                 let hasHistory = false;
 
@@ -4756,10 +4883,15 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     }
                 });
 
-                pt.innerHTML = pendingCards.join('');
-                ht.innerHTML = hasHistory ? historyRows.join('') : '<tr><td colspan="4" class="text-center py-8 text-gray-500">Belum ada riwayat transaksi selesai.</td></tr>';
-                if (hasPending) pSec.classList.remove('hidden'); else pSec.classList.add('hidden');
-                markDashboardReady('payment');
+                const nextPendingHtml = pendingCards.join('');
+                const nextHistoryHtml = hasHistory ? historyRows.join('') : '<tr><td colspan="4" class="text-center py-8 text-gray-500">Belum ada riwayat transaksi selesai.</td></tr>';
+                queueDashboardCommit('payment', () => {
+                    pt.innerHTML = nextPendingHtml;
+                    ht.innerHTML = nextHistoryHtml;
+                    if (hasPending) pSec.classList.remove('hidden'); else pSec.classList.add('hidden');
+                    markDashboardReady('payment');
+                    if (!hasUpgradeProcessing && remoteUpgradeSyncActive) finishRemoteUpgradeSync(650);
+                });
             });
 
         }
@@ -10011,21 +10143,21 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 window.__salesAnalyticsCharts[eventKey] = new Chart(eventCanvas.getContext('2d'), {
                     type: 'bar',
                     data: { labels: rows.map(row => row.eventName.length > 22 ? `${row.eventName.slice(0, 22)}…` : row.eventName), datasets: [{ data: rows.map(row => row.revenue), backgroundColor: colors.yellow, borderRadius: 8, maxBarThickness: 28 }] },
-                    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: commonPlugins, scales: { x: { beginAtZero: true, ticks: { color: colors.muted, font: { size: 10 }, callback: value => `Rp${Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}` }, grid: { color: colors.grid } }, y: { ticks: { color: colors.text, font: { size: 10 } }, grid: { display: false } } } }
+                    options: { responsive: true, maintainAspectRatio: false, animation: false, resizeDelay: 120, normalized: true, indexAxis: 'y', plugins: commonPlugins, scales: { x: { beginAtZero: true, ticks: { color: colors.muted, font: { size: 10 }, callback: value => `Rp${Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}` }, grid: { color: colors.grid } }, y: { ticks: { color: colors.text, font: { size: 10 } }, grid: { display: false } } } }
                 });
             }
             if (dateCanvas) {
                 window.__salesAnalyticsCharts[dateKey] = new Chart(dateCanvas.getContext('2d'), {
                     type: 'line',
                     data: { labels: analytics.daily.map(row => row.label), datasets: [{ data: analytics.daily.map(row => row.orders), borderColor: colors.cyan, backgroundColor: colors.cyanFill, fill: true, tension: .34, pointRadius: 2, pointHoverRadius: 5 }] },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: commonPlugins, scales: commonScales }
+                    options: { responsive: true, maintainAspectRatio: false, animation: false, resizeDelay: 120, normalized: true, plugins: commonPlugins, scales: commonScales }
                 });
             }
             if (hourCanvas) {
                 window.__salesAnalyticsCharts[hourKey] = new Chart(hourCanvas.getContext('2d'), {
                     type: 'bar',
                     data: { labels: analytics.hourly.map(row => row.label), datasets: [{ data: analytics.hourly.map(row => row.orders), backgroundColor: analytics.hourly.map(row => row.orders === analytics.peakHour?.orders && row.orders > 0 ? colors.pink : colors.green), borderRadius: 6, maxBarThickness: 18 }] },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: commonPlugins, scales: { x: { ...commonScales.x, ticks: { ...commonScales.x.ticks, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } }, y: commonScales.y } }
+                    options: { responsive: true, maintainAspectRatio: false, animation: false, resizeDelay: 120, normalized: true, plugins: commonPlugins, scales: { x: { ...commonScales.x, ticks: { ...commonScales.x.ticks, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } }, y: commonScales.y } }
                 });
             }
         };
@@ -10120,12 +10252,26 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             try { window.renderVendorDetailSalesAnalytics(); } catch (err) { console.warn('renderVendorDetailSalesAnalytics', err); }
         };
 
-        // Re-render analytics after the existing dashboard refresh cycle.
+        window.scheduleSalesAnalyticsRender = function(delay = 100) {
+            clearTimeout(window.__salesAnalyticsRenderTimer);
+            return new Promise(resolve => {
+                window.__salesAnalyticsRenderTimer = setTimeout(() => {
+                    requestAnimationFrame(() => {
+                        window.renderAllSalesAnalytics();
+                        resolve(true);
+                    });
+                }, Math.max(0, Number(delay) || 0));
+            });
+        };
+
+        // Re-render charts inside the same awaited dashboard refresh. Previously charts were
+        // destroyed/recreated in a detached timeout and kept animating after the upgrade
+        // overlay disappeared, which looked like the Vendor dashboard was shaking.
         const originalDashboardRefreshV26 = window.refreshDashboardAfterDataMutation;
-        window.refreshDashboardAfterDataMutation = function() {
+        window.refreshDashboardAfterDataMutation = async function() {
             const result = typeof originalDashboardRefreshV26 === 'function' ? originalDashboardRefreshV26.apply(this, arguments) : Promise.resolve();
-            Promise.resolve(result).finally(() => setTimeout(window.renderAllSalesAnalytics, 60));
-            return result;
+            await Promise.resolve(result);
+            await window.scheduleSalesAnalyticsRender(40);
         };
 
         const originalOpenVendorDetailV26 = window.openVendorDetail;
@@ -10133,7 +10279,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const result = typeof originalOpenVendorDetailV26 === 'function' ? originalOpenVendorDetailV26.apply(this, arguments) : undefined;
             setTimeout(() => {
                 window.populateVendorDetailAnalyticsFilters(vendorId);
-                window.renderVendorDetailSalesAnalytics();
+                window.scheduleSalesAnalyticsRender(30);
             }, 100);
             return result;
         };
@@ -10141,13 +10287,13 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         const originalSwitchAdminTabV26 = window.switchAdminTab;
         window.switchAdminTab = function(tabName) {
             const result = typeof originalSwitchAdminTabV26 === 'function' ? originalSwitchAdminTabV26.apply(this, arguments) : undefined;
-            if (tabName === 'dashboard' || tabName === 'dash-vendor') setTimeout(window.renderAllSalesAnalytics, 130);
+            if (tabName === 'dashboard' || tabName === 'dash-vendor') window.scheduleSalesAnalyticsRender(130);
             return result;
         };
 
         setTimeout(() => {
             window.populateMainSalesAnalyticsFilters();
-            window.renderAllSalesAnalytics();
+            window.scheduleSalesAnalyticsRender(0);
         }, 350);
 
         // Tiket Kaka v27: payment validation popup guard, Vendor editing, and silent waiting room UI.
