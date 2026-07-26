@@ -4117,7 +4117,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     if (role === 'Vendor') {
                         if(window.isSuperAdmin) {
                             vendorSelectHtml += `<option value="${k}">${u.nama}</option>`;
-                            if (vt) vt.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3 font-bold text-amber-500">${u.nama}</td><td class="px-4 py-3">${u.username}</td><td class="px-4 py-3 text-center text-purple-400 font-bold bg-purple-500/10 rounded">${u.platform_fee || 0}%</td><td class="px-4 py-3 text-right"><button type="button" onclick="window.deleteVendorAccount('${k}')" class="text-red-400 cursor-pointer bg-red-500/20 px-3 py-1 rounded text-xs font-bold hover:bg-red-500 hover:text-white transition-colors"><i class="fa-solid fa-ban mr-1"></i> Banned & Hapus</button></td></tr>`;
+                            const safeVendorLogo = window.safeImageUrl(u.logoUrl || u.vendorLogoUrl || '', '');
+                            const vendorLogoCell = safeVendorLogo
+                                ? `<img src="${safeVendorLogo}" alt="Logo ${escapeHtml(u.nama || 'Vendor')}" class="tk-vendor-logo-cell" referrerpolicy="no-referrer">`
+                                : `<div class="tk-vendor-logo-cell flex items-center justify-center text-cyan-300"><i class="fa-solid fa-store"></i></div>`;
+                            if (vt) vt.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3">${vendorLogoCell}</td><td class="px-4 py-3 font-bold text-amber-500">${escapeHtml(u.nama || 'Vendor')}</td><td class="px-4 py-3">${escapeHtml(u.username || '-')}</td><td class="px-4 py-3 text-center text-purple-400 font-bold bg-purple-500/10 rounded">${u.platform_fee || 0}%</td><td class="px-4 py-3 text-right"><button type="button" onclick="window.deleteVendorAccount('${k}')" class="text-red-400 cursor-pointer bg-red-500/20 px-3 py-1 rounded text-xs font-bold hover:bg-red-500 hover:text-white transition-colors"><i class="fa-solid fa-ban mr-1"></i> Banned & Hapus</button></td></tr>`;
                         }
                     }
                     else if(role.includes('Scanner')) {
@@ -4235,6 +4239,13 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             document.getElementById('vendor-list-view').classList.add('hidden');
             document.getElementById('vendor-detail-view').classList.remove('hidden');
             safeSetText('vd-name-title', vendor.nama);
+            const detailLogo = window.safeImageUrl(vendor.logoUrl || vendor.vendorLogoUrl || '', '');
+            const detailLogoImg = document.getElementById('vd-logo-img');
+            const detailLogoFallback = document.getElementById('vd-logo-fallback');
+            if (detailLogoImg) {
+                if (detailLogo) { detailLogoImg.src = detailLogo; detailLogoImg.classList.remove('hidden'); detailLogoFallback?.classList.add('hidden'); }
+                else { detailLogoImg.removeAttribute('src'); detailLogoImg.classList.add('hidden'); detailLogoFallback?.classList.remove('hidden'); }
+            }
 
             window.refreshVendorDetailGateStats?.(vid);
             window.updateFinanceSummaryCards(vid);
@@ -4372,14 +4383,18 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         if(ev.ownerId === vid) vEvents++;
                     });
 
+                    const safeVendorLogo = window.safeImageUrl(vendor.logoUrl || vendor.vendorLogoUrl || '', '');
+                    const cardLogo = safeVendorLogo
+                        ? `<img src="${safeVendorLogo}" alt="Logo ${escapeHtml(vendor.nama || 'Vendor')}" class="tk-vendor-card-logo" referrerpolicy="no-referrer">`
+                        : `<div class="tk-vendor-card-logo flex items-center justify-center text-cyan-300"><i class="fa-solid fa-store text-xl"></i></div>`;
                     html += `
                     <div class="glass-card rounded-2xl p-6 border border-white/5 hover:border-amber-500/50 cursor-pointer transition-all shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)]" onclick="openVendorDetail('${vid}')">
                         <div class="flex justify-between items-start mb-4">
-                            <div class="w-12 h-12 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center text-xl"><i class="fa-solid fa-store"></i></div>
+                            ${cardLogo}
                             <span class="text-xs font-bold bg-white/10 px-2 py-1 rounded text-gray-300">Fee: ${vendor.platform_fee || 0}%</span>
                         </div>
-                        <h3 class="text-xl font-bold text-white mb-1 truncate">${vendor.nama}</h3>
-                        <p class="text-sm text-gray-400 mb-4">@${vendor.username}</p>
+                        <h3 class="text-xl font-bold text-white mb-1 truncate">${escapeHtml(vendor.nama || 'Vendor')}</h3>
+                        <p class="text-sm text-gray-400 mb-4">@${escapeHtml(vendor.username || '-')}</p>
                         <div class="flex justify-between items-end pt-4 border-t border-white/10">
                             <div><p class="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Total Gross</p><p class="text-green-400 font-bold">${formatRp(vGross)}</p></div>
                             <div class="text-right"><p class="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Event</p><p class="text-white font-bold">${vEvents}</p></div>
@@ -7800,6 +7815,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 if (!(document.getElementById('ev-date')?.value || '').trim()) throw new Error('Tanggal event wajib diisi.');
                 if (!(document.getElementById('ev-location')?.value || '').trim()) throw new Error('Lokasi event wajib diisi.');
 
+                const ownerBrandData = (window.usersMapCache && theOwnerId !== 'SUPER_ADMIN') ? (window.usersMapCache[theOwnerId] || {}) : (window.currentUserData || {});
+                const resolvedOrgName = (document.getElementById('ev-org-name')?.value || '').trim() || ownerBrandData.nama || 'Tiket Kaka';
+                const resolvedOrgLogo = window.safeImageUrl((document.getElementById('ev-org-logo')?.value || '').trim(), '') || window.safeImageUrl(ownerBrandData.logoUrl || ownerBrandData.vendorLogoUrl || '', '');
+
                 const payload = { 
                     kategori: kategoriVal, 
                     title: titleEl?.value || '', 
@@ -7810,8 +7829,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     location: document.getElementById('ev-location')?.value || '', 
                     image: document.getElementById('ev-image')?.value || '', 
                     banner: document.getElementById('ev-banner')?.value || '', 
-                    org_name: document.getElementById('ev-org-name')?.value || '', 
-                    org_logo: document.getElementById('ev-org-logo')?.value || '', 
+                    org_name: resolvedOrgName, 
+                    org_logo: resolvedOrgLogo, 
                     org_sosmed: document.getElementById('ev-org-sosmed')?.value || '', 
                     desc: document.getElementById('ev-desc')?.value || '', 
                     snk: document.getElementById('ev-snk')?.value || '', 
@@ -9667,4 +9686,465 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 Swal.fire({ icon: 'error', title: 'Error', text: err.message, background: '#1e293b', color: '#fff' });
             }
         };
-    
+            // Tiket Kaka v26: Vendor logo validation + sales analytics dashboards.
+        window.VENDOR_LOGO_REQUIRED_WIDTH = 800;
+        window.VENDOR_LOGO_REQUIRED_HEIGHT = 800;
+        window.__vendorLogoPreviewTimer = null;
+        window.__vendorLogoValidationCache = {};
+
+        window.inspectRemoteImageDimensions = function(url, timeoutMs = 8000) {
+            const safeUrl = window.safeImageUrl(url, '');
+            if (!safeUrl) return Promise.reject(new Error('URL logo harus diawali http:// atau https://'));
+            if (window.__vendorLogoValidationCache[safeUrl]) return Promise.resolve(window.__vendorLogoValidationCache[safeUrl]);
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                let settled = false;
+                const timer = setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    img.src = '';
+                    reject(new Error('Logo terlalu lama dimuat. Periksa URL gambar.'));
+                }, timeoutMs);
+                img.referrerPolicy = 'no-referrer';
+                img.onload = () => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    const result = { url: safeUrl, width: Number(img.naturalWidth || 0), height: Number(img.naturalHeight || 0) };
+                    window.__vendorLogoValidationCache[safeUrl] = result;
+                    resolve(result);
+                };
+                img.onerror = () => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    reject(new Error('Logo tidak dapat dibuka. Gunakan URL gambar langsung PNG atau WebP.'));
+                };
+                img.src = safeUrl;
+            });
+        };
+
+        window.setVendorLogoPreviewState = function(state, message = '', url = '') {
+            const preview = document.getElementById('vend-logo-preview');
+            const placeholder = document.getElementById('vend-logo-placeholder');
+            const status = document.getElementById('vend-logo-status');
+            if (preview) {
+                if (url && state !== 'error') {
+                    preview.src = url;
+                    preview.classList.remove('hidden');
+                    placeholder?.classList.add('hidden');
+                } else {
+                    preview.removeAttribute('src');
+                    preview.classList.add('hidden');
+                    placeholder?.classList.remove('hidden');
+                }
+            }
+            if (status) {
+                status.textContent = message || 'Masukkan URL untuk memeriksa ukuran gambar.';
+                status.className = 'mt-1 text-[11px] ' + (
+                    state === 'success' ? 'text-green-400' :
+                    state === 'error' ? 'text-red-400' :
+                    state === 'loading' ? 'text-cyan-300' : 'text-gray-500'
+                );
+            }
+        };
+
+        window.previewVendorLogoUrl = function(value) {
+            clearTimeout(window.__vendorLogoPreviewTimer);
+            const safeUrl = window.safeImageUrl(value, '');
+            if (!safeUrl) {
+                window.setVendorLogoPreviewState('idle');
+                return;
+            }
+            window.setVendorLogoPreviewState('loading', 'Memeriksa ukuran logo...', safeUrl);
+            window.__vendorLogoPreviewTimer = setTimeout(async () => {
+                try {
+                    const info = await window.inspectRemoteImageDimensions(safeUrl);
+                    const valid = info.width === window.VENDOR_LOGO_REQUIRED_WIDTH && info.height === window.VENDOR_LOGO_REQUIRED_HEIGHT;
+                    if (!valid) {
+                        window.setVendorLogoPreviewState('error', `Ukuran ditemukan ${info.width} × ${info.height} px. Logo wajib 800 × 800 px.`);
+                        return;
+                    }
+                    window.setVendorLogoPreviewState('success', 'Logo valid: 800 × 800 px.', safeUrl);
+                } catch (err) {
+                    window.setVendorLogoPreviewState('error', err.message || 'Logo tidak dapat diperiksa.');
+                }
+            }, 450);
+        };
+
+        window.resetVendorLogoPreview = function() {
+            clearTimeout(window.__vendorLogoPreviewTimer);
+            window.setVendorLogoPreviewState('idle');
+        };
+
+        window.handleAddVendor = async function(e) {
+            e?.preventDefault?.();
+            const btn = document.getElementById('btn-save-vendor');
+            if (!btn) return;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Memproses...';
+            btn.disabled = true;
+            let createdAuthUser = null;
+            try {
+                if (!window.currentUserData || !window.isSuperAdmin) throw new Error('Hanya Super Admin yang dapat membuat akun Vendor.');
+                const userEl = document.getElementById('vend-user');
+                const passEl = document.getElementById('vend-pass');
+                const nameEl = document.getElementById('vend-name');
+                const feeEl = document.getElementById('vend-fee');
+                const eoFeeEl = document.getElementById('vend-eo-fee');
+                const logoEl = document.getElementById('vend-logo-url');
+                if (!userEl || !passEl || !nameEl || !feeEl || !eoFeeEl || !logoEl) throw new Error('Form Vendor belum lengkap.');
+                const username = userEl.value.trim().replace(/\s+/g, '').toLowerCase();
+                const vendorName = nameEl.value.trim();
+                const password = passEl.value.trim();
+                const logoUrl = window.safeImageUrl(logoEl.value, '');
+                if (!vendorName) throw new Error('Nama Event Organizer wajib diisi.');
+                if (!/^[a-z0-9._-]{3,40}$/i.test(username)) throw new Error('Username minimal 3 karakter dan hanya boleh berisi huruf, angka, titik, garis bawah, atau tanda minus.');
+                if (password.length < 6) throw new Error('Password minimal 6 karakter.');
+                if (!logoUrl) throw new Error('URL Logo Vendor wajib diisi.');
+                const imageInfo = await window.inspectRemoteImageDimensions(logoUrl);
+                if (imageInfo.width !== 800 || imageInfo.height !== 800) {
+                    throw new Error(`Ukuran logo ${imageInfo.width} × ${imageInfo.height} px. Gunakan tepat 800 × 800 px.`);
+                }
+                const fee = Math.min(100, Math.max(0, parseFloat(feeEl.value) || 0));
+                const eoFee = Math.min(100, Math.max(0, parseFloat(eoFeeEl.value) || 0));
+                const email = `${username}@beetix.com`;
+                window.ensureSecondaryApp();
+                if (!window.secondaryApp?.auth) throw new Error('Sistem autentikasi Vendor tidak tersedia.');
+                const result = await window.secondaryApp.auth().createUserWithEmailAndPassword(email, password);
+                createdAuthUser = result.user;
+                const vendorProfile = {
+                    uid: result.user.uid,
+                    nama: vendorName,
+                    username,
+                    email,
+                    role: 'Vendor',
+                    platform_fee: fee,
+                    eo_fee: eoFee,
+                    logoUrl,
+                    logoWidth: 800,
+                    logoHeight: 800,
+                    logoFormatNote: 'PNG/WebP transparan 800x800 px',
+                    ownerId: window.currentUserData.uid,
+                    createdAt: firebase.database.ServerValue.TIMESTAMP
+                };
+                await db.ref(`users/${result.user.uid}`).set(vendorProfile);
+                if (!window.usersMapCache) window.usersMapCache = {};
+                window.usersMapCache[result.user.uid] = { ...vendorProfile, createdAt: Date.now() };
+                await window.secondaryApp.auth().signOut();
+                document.getElementById('add-vendor-modal')?.querySelector('form')?.reset();
+                window.resetVendorLogoPreview();
+                closeModal('add-vendor-modal');
+                window.updateVendorDashboardList?.();
+                window.populateMainSalesAnalyticsFilters?.();
+                Toast.fire({ icon: 'success', title: 'Akun Vendor dan logo 800 × 800 px berhasil disimpan.' });
+            } catch (err) {
+                try { await window.secondaryApp?.auth?.().signOut?.(); } catch (e2) {}
+                Toast.fire({ icon: 'error', title: err.message || 'Gagal membuat akun Vendor.' });
+            } finally {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        };
+
+        window.applyVendorBrandToEventForm = function(ownerId) {
+            const owner = ownerId && ownerId !== 'SUPER_ADMIN' ? (window.usersMapCache?.[ownerId] || {}) : (window.isVendor ? (window.currentUserData || {}) : {});
+            if (!owner || !Object.keys(owner).length) return;
+            const nameEl = document.getElementById('ev-org-name');
+            const logoEl = document.getElementById('ev-org-logo');
+            if (nameEl && !nameEl.value.trim()) nameEl.value = owner.nama || '';
+            if (logoEl && !logoEl.value.trim()) logoEl.value = window.safeImageUrl(owner.logoUrl || owner.vendorLogoUrl || '', '');
+        };
+
+        window.applyCurrentVendorBrandToEventForm = function() {
+            if (window.isVendor) window.applyVendorBrandToEventForm(window.currentUserData?.uid || '');
+            else if (window.isSuperAdmin) window.applySelectedVendorBrandToEventForm();
+        };
+
+        window.applySelectedVendorBrandToEventForm = function() {
+            const ownerId = document.getElementById('ev-owner')?.value || '';
+            if (!ownerId || ownerId === 'SUPER_ADMIN') return;
+            const nameEl = document.getElementById('ev-org-name');
+            const logoEl = document.getElementById('ev-org-logo');
+            const owner = window.usersMapCache?.[ownerId] || {};
+            if (nameEl && (!nameEl.value.trim() || !window.editEventKey)) nameEl.value = owner.nama || '';
+            if (logoEl && (!logoEl.value.trim() || !window.editEventKey)) logoEl.value = window.safeImageUrl(owner.logoUrl || owner.vendorLogoUrl || '', '');
+        };
+
+        window.__salesAnalyticsCharts = window.__salesAnalyticsCharts || {};
+        window.destroySalesAnalyticsChart = function(key) {
+            const chart = window.__salesAnalyticsCharts[key];
+            if (chart && typeof chart.destroy === 'function') chart.destroy();
+            delete window.__salesAnalyticsCharts[key];
+        };
+
+        window.getSalesAnalyticsOwnerId = function(payment) {
+            if (!payment) return '';
+            return window.getPaymentOwnerId?.(payment) || payment.ownerId || window.eventDataMap?.[payment.eventId]?.ownerId || 'SUPER_ADMIN';
+        };
+
+        window.getSalesAnalyticsTimestamp = function(payment) {
+            const candidates = [payment?.createdAt, payment?.approvedAt, payment?.ticketCreatedAt, payment?.updatedAt];
+            for (const candidate of candidates) {
+                const timestamp = Number(candidate || 0);
+                if (Number.isFinite(timestamp) && timestamp > 0) return timestamp;
+            }
+            return 0;
+        };
+
+        window.getAnalyticsDateKey = function(timestamp) {
+            const d = new Date(timestamp);
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        window.formatAnalyticsDate = function(dateKey, includeYear = false) {
+            if (!dateKey) return '-';
+            const d = new Date(`${dateKey}T12:00:00`);
+            return d.toLocaleDateString('id-ID', includeYear ? { day: '2-digit', month: 'short', year: 'numeric' } : { day: '2-digit', month: 'short' });
+        };
+
+        window.buildSalesAnalyticsData = function({ ownerId = 'ALL', eventId = 'ALL', days = 30 } = {}) {
+            const now = Date.now();
+            const normalizedDays = Math.max(1, Number(days || 30));
+            const startDate = new Date(now);
+            startDate.setHours(0, 0, 0, 0);
+            startDate.setDate(startDate.getDate() - (normalizedDays - 1));
+            const startAt = startDate.getTime();
+            const payments = Object.entries(window.globalPaymentsData || {});
+            const events = window.eventDataMap || {};
+            const dateBuckets = {};
+            const hourBuckets = Array.from({ length: 24 }, () => 0);
+            const eventBuckets = {};
+            const buyers = new Set();
+            let revenue = 0;
+            let orders = 0;
+
+            payments.forEach(([paymentId, payment]) => {
+                if (!payment) return;
+                const status = (payment.status || '').toString().toUpperCase();
+                if (status !== 'APPROVED') return;
+                const paymentEventId = (payment.eventId || '').toString();
+                if (!paymentEventId || !events[paymentEventId]) return;
+                const paymentOwnerId = window.getSalesAnalyticsOwnerId(payment);
+                if (ownerId !== 'ALL' && paymentOwnerId !== ownerId) return;
+                if (eventId !== 'ALL' && paymentEventId !== eventId) return;
+                const timestamp = window.getSalesAnalyticsTimestamp(payment);
+                if (!timestamp || timestamp < startAt || timestamp > now + 60000) return;
+                const amount = Math.max(0, Number(payment.total || 0) || 0);
+                if (amount <= 0) return;
+
+                const dateKey = window.getAnalyticsDateKey(timestamp);
+                const hour = new Date(timestamp).getHours();
+                const eventName = (events[paymentEventId]?.title || payment.eventName || 'Event').toString();
+                revenue += amount;
+                orders += 1;
+                if (payment.uid) buyers.add(payment.uid);
+                dateBuckets[dateKey] = dateBuckets[dateKey] || { orders: 0, revenue: 0 };
+                dateBuckets[dateKey].orders += 1;
+                dateBuckets[dateKey].revenue += amount;
+                hourBuckets[hour] += 1;
+                eventBuckets[paymentEventId] = eventBuckets[paymentEventId] || { eventId: paymentEventId, eventName, orders: 0, revenue: 0 };
+                eventBuckets[paymentEventId].orders += 1;
+                eventBuckets[paymentEventId].revenue += amount;
+            });
+
+            const daily = [];
+            for (let offset = normalizedDays - 1; offset >= 0; offset--) {
+                const d = new Date(now - offset * 86400000);
+                const key = window.getAnalyticsDateKey(d.getTime());
+                const bucket = dateBuckets[key] || { orders: 0, revenue: 0 };
+                daily.push({ key, label: window.formatAnalyticsDate(key), orders: bucket.orders, revenue: bucket.revenue });
+            }
+            const hourly = hourBuckets.map((count, hour) => ({ hour, label: `${String(hour).padStart(2, '0')}:00`, orders: count }));
+            const byEvent = Object.values(eventBuckets).sort((a, b) => b.revenue - a.revenue || b.orders - a.orders).slice(0, 8);
+            const peakDate = Object.entries(dateBuckets).sort((a, b) => b[1].orders - a[1].orders || b[1].revenue - a[1].revenue)[0] || null;
+            const peakHour = hourly.slice().sort((a, b) => b.orders - a.orders || a.hour - b.hour)[0] || null;
+            return { revenue, orders, buyers: buyers.size, daily, hourly, byEvent, peakDate, peakHour };
+        };
+
+        window.getAnalyticsChartColors = function() {
+            return {
+                text: 'rgba(226,232,240,.9)',
+                muted: 'rgba(148,163,184,.75)',
+                grid: 'rgba(148,163,184,.12)',
+                cyan: 'rgba(34,211,238,.9)',
+                cyanFill: 'rgba(34,211,238,.18)',
+                yellow: 'rgba(250,204,21,.9)',
+                pink: 'rgba(244,114,182,.86)',
+                green: 'rgba(74,222,128,.85)'
+            };
+        };
+
+        window.renderSalesAnalyticsCharts = function(prefix, analytics) {
+            if (typeof Chart === 'undefined') return;
+            const colors = window.getAnalyticsChartColors();
+            const commonPlugins = {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(2,6,23,.96)',
+                    titleColor: '#fff',
+                    bodyColor: '#cbd5e1',
+                    borderColor: 'rgba(103,232,249,.25)',
+                    borderWidth: 1,
+                    padding: 10
+                }
+            };
+            const commonScales = {
+                x: { ticks: { color: colors.muted, font: { size: 10 } }, grid: { display: false } },
+                y: { beginAtZero: true, ticks: { color: colors.muted, precision: 0 }, grid: { color: colors.grid } }
+            };
+
+            const eventCanvas = document.getElementById(`${prefix}-sales-chart-event`);
+            const dateCanvas = document.getElementById(`${prefix}-sales-chart-date`);
+            const hourCanvas = document.getElementById(`${prefix}-sales-chart-hour`);
+            const eventKey = `${prefix}-event`;
+            const dateKey = `${prefix}-date`;
+            const hourKey = `${prefix}-hour`;
+            [eventKey, dateKey, hourKey].forEach(window.destroySalesAnalyticsChart);
+
+            if (eventCanvas) {
+                const rows = analytics.byEvent.length ? analytics.byEvent : [{ eventName: 'Belum ada penjualan', revenue: 0 }];
+                window.__salesAnalyticsCharts[eventKey] = new Chart(eventCanvas.getContext('2d'), {
+                    type: 'bar',
+                    data: { labels: rows.map(row => row.eventName.length > 22 ? `${row.eventName.slice(0, 22)}…` : row.eventName), datasets: [{ data: rows.map(row => row.revenue), backgroundColor: colors.yellow, borderRadius: 8, maxBarThickness: 28 }] },
+                    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: commonPlugins, scales: { x: { beginAtZero: true, ticks: { color: colors.muted, font: { size: 10 }, callback: value => `Rp${Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}` }, grid: { color: colors.grid } }, y: { ticks: { color: colors.text, font: { size: 10 } }, grid: { display: false } } } }
+                });
+            }
+            if (dateCanvas) {
+                window.__salesAnalyticsCharts[dateKey] = new Chart(dateCanvas.getContext('2d'), {
+                    type: 'line',
+                    data: { labels: analytics.daily.map(row => row.label), datasets: [{ data: analytics.daily.map(row => row.orders), borderColor: colors.cyan, backgroundColor: colors.cyanFill, fill: true, tension: .34, pointRadius: 2, pointHoverRadius: 5 }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: commonPlugins, scales: commonScales }
+                });
+            }
+            if (hourCanvas) {
+                window.__salesAnalyticsCharts[hourKey] = new Chart(hourCanvas.getContext('2d'), {
+                    type: 'bar',
+                    data: { labels: analytics.hourly.map(row => row.label), datasets: [{ data: analytics.hourly.map(row => row.orders), backgroundColor: analytics.hourly.map(row => row.orders === analytics.peakHour?.orders && row.orders > 0 ? colors.pink : colors.green), borderRadius: 6, maxBarThickness: 18 }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: commonPlugins, scales: { x: { ...commonScales.x, ticks: { ...commonScales.x.ticks, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } }, y: commonScales.y } }
+                });
+            }
+        };
+
+        window.updateSalesAnalyticsKpis = function(prefix, analytics) {
+            safeSetText(`${prefix}-sales-kpi-revenue`, formatRp(analytics.revenue));
+            safeSetText(`${prefix}-sales-kpi-orders`, analytics.orders);
+            safeSetText(`${prefix}-sales-kpi-buyers`, `${analytics.buyers} pembeli unik`);
+            if (analytics.peakDate && analytics.peakDate[1]?.orders > 0) {
+                safeSetText(`${prefix}-sales-kpi-peak-date`, window.formatAnalyticsDate(analytics.peakDate[0], true));
+                safeSetText(`${prefix}-sales-kpi-peak-date-detail`, `${analytics.peakDate[1].orders} transaksi • ${formatRp(analytics.peakDate[1].revenue)}`);
+            } else {
+                safeSetText(`${prefix}-sales-kpi-peak-date`, '-');
+                safeSetText(`${prefix}-sales-kpi-peak-date-detail`, 'Belum ada transaksi');
+            }
+            if (analytics.peakHour && analytics.peakHour.orders > 0) {
+                safeSetText(`${prefix}-sales-kpi-peak-hour`, `${String(analytics.peakHour.hour).padStart(2, '0')}:00–${String((analytics.peakHour.hour + 1) % 24).padStart(2, '0')}:00`);
+                safeSetText(`${prefix}-sales-kpi-peak-hour-detail`, `${analytics.peakHour.orders} transaksi pada jam ini`);
+            } else {
+                safeSetText(`${prefix}-sales-kpi-peak-hour`, '-');
+                safeSetText(`${prefix}-sales-kpi-peak-hour-detail`, 'Belum ada transaksi');
+            }
+        };
+
+        window.populateEventAnalyticsSelect = function(selectId, ownerId = 'ALL', allLabel = 'Semua Event') {
+            const select = document.getElementById(selectId);
+            if (!select) return;
+            const previous = select.value || 'ALL';
+            const options = Object.entries(window.eventDataMap || {})
+                .filter(([, event]) => ownerId === 'ALL' || (event?.ownerId || 'SUPER_ADMIN') === ownerId)
+                .sort((a, b) => (a[1]?.title || '').localeCompare(b[1]?.title || '', 'id'));
+            select.innerHTML = `<option value="ALL">${allLabel}</option>` + options.map(([eventId, event]) => `<option value="${escapeHtml(eventId)}">${escapeHtml(event.title || 'Event')}</option>`).join('');
+            select.value = options.some(([eventId]) => eventId === previous) ? previous : 'ALL';
+        };
+
+        window.populateMainSalesAnalyticsFilters = function() {
+            const ownerSelect = document.getElementById('sales-analytics-owner-filter');
+            const ownerWrap = document.getElementById('sales-owner-filter-wrap');
+            if (!ownerSelect) return;
+            if (window.isVendor) {
+                ownerWrap?.classList.add('hidden');
+                ownerSelect.innerHTML = `<option value="${escapeHtml(window.currentUserData?.uid || '')}">Event Saya</option>`;
+                ownerSelect.value = window.currentUserData?.uid || '';
+            } else {
+                ownerWrap?.classList.remove('hidden');
+                const previous = ownerSelect.value || 'ALL';
+                const vendors = Object.entries(window.usersMapCache || {}).filter(([, user]) => user?.role === 'Vendor').sort((a, b) => (a[1]?.nama || '').localeCompare(b[1]?.nama || '', 'id'));
+                ownerSelect.innerHTML = '<option value="ALL">Semua Vendor & Admin</option><option value="SUPER_ADMIN">Event Super Admin</option>' + vendors.map(([uid, vendor]) => `<option value="${escapeHtml(uid)}">${escapeHtml(vendor.nama || vendor.username || 'Vendor')}</option>`).join('');
+                ownerSelect.value = ['ALL', 'SUPER_ADMIN', ...vendors.map(([uid]) => uid)].includes(previous) ? previous : 'ALL';
+            }
+            const ownerId = window.isVendor ? (window.currentUserData?.uid || '') : (ownerSelect.value || 'ALL');
+            window.populateEventAnalyticsSelect('sales-analytics-event-filter', ownerId, ownerId === 'ALL' ? 'Semua Event' : 'Semua Event Pemilik');
+        };
+
+        window.handleMainAnalyticsOwnerChange = function() {
+            const ownerId = window.isVendor ? (window.currentUserData?.uid || '') : (document.getElementById('sales-analytics-owner-filter')?.value || 'ALL');
+            window.populateEventAnalyticsSelect('sales-analytics-event-filter', ownerId, ownerId === 'ALL' ? 'Semua Event' : 'Semua Event Pemilik');
+            window.renderMainSalesAnalytics();
+        };
+
+        window.renderMainSalesAnalytics = function() {
+            if (!document.getElementById('sales-analytics-panel')) return;
+            window.populateMainSalesAnalyticsFilters();
+            const ownerId = window.isVendor ? (window.currentUserData?.uid || '') : (document.getElementById('sales-analytics-owner-filter')?.value || 'ALL');
+            const eventId = document.getElementById('sales-analytics-event-filter')?.value || 'ALL';
+            const days = Number(document.getElementById('sales-analytics-period-filter')?.value || 30);
+            const analytics = window.buildSalesAnalyticsData({ ownerId, eventId, days });
+            const subtitle = document.getElementById('sales-analytics-scope');
+            if (subtitle) subtitle.textContent = window.isVendor ? 'Hanya menampilkan transaksi APPROVED untuk event milik akun Vendor Anda.' : 'Menampilkan transaksi APPROVED seluruh event atau pemilik yang dipilih.';
+            window.updateSalesAnalyticsKpis('sales', analytics);
+            window.renderSalesAnalyticsCharts('sales', analytics);
+        };
+
+        window.populateVendorDetailAnalyticsFilters = function(vendorId) {
+            if (!vendorId) return;
+            window.populateEventAnalyticsSelect('vd-sales-event-filter', vendorId, 'Semua Event Vendor');
+        };
+
+        window.renderVendorDetailSalesAnalytics = function() {
+            const vendorId = window.activeVendorDashId || '';
+            if (!vendorId || !document.getElementById('vd-sales-analytics-panel')) return;
+            window.populateVendorDetailAnalyticsFilters(vendorId);
+            const eventId = document.getElementById('vd-sales-event-filter')?.value || 'ALL';
+            const days = Number(document.getElementById('vd-sales-period-filter')?.value || 30);
+            const analytics = window.buildSalesAnalyticsData({ ownerId: vendorId, eventId, days });
+            window.updateSalesAnalyticsKpis('vd', analytics);
+            window.renderSalesAnalyticsCharts('vd', analytics);
+        };
+
+        window.renderAllSalesAnalytics = function() {
+            try { window.renderMainSalesAnalytics(); } catch (err) { console.warn('renderMainSalesAnalytics', err); }
+            try { window.renderVendorDetailSalesAnalytics(); } catch (err) { console.warn('renderVendorDetailSalesAnalytics', err); }
+        };
+
+        // Re-render analytics after the existing dashboard refresh cycle.
+        const originalDashboardRefreshV26 = window.refreshDashboardAfterDataMutation;
+        window.refreshDashboardAfterDataMutation = function() {
+            const result = typeof originalDashboardRefreshV26 === 'function' ? originalDashboardRefreshV26.apply(this, arguments) : Promise.resolve();
+            Promise.resolve(result).finally(() => setTimeout(window.renderAllSalesAnalytics, 60));
+            return result;
+        };
+
+        const originalOpenVendorDetailV26 = window.openVendorDetail;
+        window.openVendorDetail = function(vendorId) {
+            const result = typeof originalOpenVendorDetailV26 === 'function' ? originalOpenVendorDetailV26.apply(this, arguments) : undefined;
+            setTimeout(() => {
+                window.populateVendorDetailAnalyticsFilters(vendorId);
+                window.renderVendorDetailSalesAnalytics();
+            }, 100);
+            return result;
+        };
+
+        const originalSwitchAdminTabV26 = window.switchAdminTab;
+        window.switchAdminTab = function(tabName) {
+            const result = typeof originalSwitchAdminTabV26 === 'function' ? originalSwitchAdminTabV26.apply(this, arguments) : undefined;
+            if (tabName === 'dashboard' || tabName === 'dash-vendor') setTimeout(window.renderAllSalesAnalytics, 130);
+            return result;
+        };
+
+        setTimeout(() => {
+            window.populateMainSalesAnalyticsFilters();
+            window.renderAllSalesAnalytics();
+        }, 350);

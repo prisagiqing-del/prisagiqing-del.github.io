@@ -824,3 +824,112 @@
         @media (prefers-reduced-motion: reduce) {
             #tk-mutation-overlay { transition: none !important; }
         }
+/* Tiket Kaka v26 — Vendor logo + sales analytics */
+.tk-sales-analytics {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(34, 211, 238, 0.18);
+    border-radius: 1.75rem;
+    padding: 1.25rem;
+    background:
+        radial-gradient(circle at 8% 0%, rgba(34, 211, 238, 0.16), transparent 34%),
+        radial-gradient(circle at 92% 0%, rgba(244, 114, 182, 0.13), transparent 32%),
+        linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.92));
+    box-shadow: 0 24px 60px rgba(2, 6, 23, 0.34), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.tk-sales-analytics::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,.75), transparent 85%);
+}
+.tk-sales-analytics > * { position: relative; z-index: 1; }
+.tk-sales-analytics-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.tk-sales-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    margin: 0 0 .45rem;
+    color: rgb(103 232 249);
+    font-size: .68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .22em;
+}
+.tk-sales-title { margin: 0; color: #fff; font-size: clamp(1.2rem, 2vw, 1.75rem); font-weight: 900; }
+.tk-sales-subtitle { margin: .35rem 0 0; color: rgb(148 163 184); font-size: .78rem; }
+.tk-sales-filters { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .65rem; }
+.tk-sales-filter { display: grid; gap: .3rem; min-width: 145px; }
+.tk-sales-filter span { color: rgb(148 163 184); font-size: .62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .16em; }
+.tk-sales-filter select {
+    min-height: 2.55rem;
+    border: 1px solid rgba(103, 232, 249, .2);
+    border-radius: .85rem;
+    padding: 0 2.15rem 0 .8rem;
+    color: #f8fafc;
+    background-color: rgba(2, 6, 23, .7);
+    outline: none;
+    font-size: .78rem;
+    font-weight: 700;
+}
+.tk-sales-filter select:focus { border-color: rgba(103,232,249,.72); box-shadow: 0 0 0 3px rgba(34,211,238,.11); }
+.tk-sales-kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: .8rem; margin-bottom: .9rem; }
+.tk-sales-kpis article {
+    min-height: 112px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 1.25rem;
+    padding: 1rem;
+    background: linear-gradient(150deg, rgba(255,255,255,.07), rgba(255,255,255,.025));
+}
+.tk-sales-kpis span { color: rgb(148 163 184); font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .13em; }
+.tk-sales-kpis strong { margin-top: .45rem; color: #fff; font-size: clamp(1.1rem, 2vw, 1.5rem); font-weight: 900; line-height: 1.15; }
+.tk-sales-kpis article:nth-child(1) strong { color: rgb(253 224 71); }
+.tk-sales-kpis article:nth-child(2) strong { color: rgb(103 232 249); }
+.tk-sales-kpis article:nth-child(3) strong { color: rgb(134 239 172); }
+.tk-sales-kpis article:nth-child(4) strong { color: rgb(249 168 212); }
+.tk-sales-kpis small { margin-top: .35rem; color: rgb(100 116 139); font-size: .67rem; }
+.tk-sales-chart-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .85rem; }
+.tk-sales-chart-card {
+    min-width: 0;
+    border: 1px solid rgba(255,255,255,.075);
+    border-radius: 1.25rem;
+    padding: 1rem;
+    background: rgba(2, 6, 23, .54);
+}
+.tk-sales-chart-card h4 { margin: 0; color: #f8fafc; font-size: .92rem; font-weight: 850; }
+.tk-sales-chart-card p { margin: .25rem 0 .7rem; color: rgb(100 116 139); font-size: .68rem; }
+.tk-sales-canvas-wrap { position: relative; width: 100%; height: 255px; }
+.tk-vendor-logo-field img { background-image: linear-gradient(45deg, rgba(255,255,255,.05) 25%, transparent 25%), linear-gradient(-45deg, rgba(255,255,255,.05) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(255,255,255,.05) 75%), linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.05) 75%); background-size: 12px 12px; background-position: 0 0, 0 6px, 6px -6px, -6px 0; }
+.tk-vendor-logo-cell { width: 48px; height: 48px; object-fit: contain; border-radius: 12px; padding: 5px; background: rgba(2,6,23,.7); border: 1px solid rgba(103,232,249,.2); }
+.tk-vendor-card-logo { width: 52px; height: 52px; object-fit: contain; border-radius: 16px; padding: 6px; background: rgba(2,6,23,.72); border: 1px solid rgba(103,232,249,.25); }
+@media (max-width: 1180px) {
+    .tk-sales-chart-grid { grid-template-columns: 1fr 1fr; }
+    .tk-sales-chart-card:first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 860px) {
+    .tk-sales-analytics { padding: 1rem; border-radius: 1.35rem; }
+    .tk-sales-analytics-head { align-items: stretch; flex-direction: column; }
+    .tk-sales-filters { justify-content: stretch; }
+    .tk-sales-filter { flex: 1 1 145px; }
+    .tk-sales-kpis { grid-template-columns: 1fr 1fr; }
+    .tk-sales-chart-grid { grid-template-columns: 1fr; }
+    .tk-sales-chart-card:first-child { grid-column: auto; }
+    .tk-sales-canvas-wrap { height: 235px; }
+}
+@media (max-width: 520px) {
+    .tk-sales-kpis { grid-template-columns: 1fr; }
+    .tk-sales-kpis article { min-height: 96px; }
+    .tk-sales-filter { flex-basis: 100%; }
+}

@@ -699,6 +699,54 @@
                         <h2 class="text-2xl font-bold text-white">Dashboard Realtime</h2>
                     </div>
 
+                    <section id="sales-analytics-panel" class="tk-sales-analytics mb-8">
+                        <div class="tk-sales-analytics-head">
+                            <div>
+                                <p class="tk-sales-eyebrow"><i class="fa-solid fa-chart-column"></i> Analitik transaksi</p>
+                                <h3 class="tk-sales-title">Grafik Penjualan Event</h3>
+                                <p id="sales-analytics-scope" class="tk-sales-subtitle">Penjualan yang sudah disetujui, waktu pembelian, dan event terlaris.</p>
+                            </div>
+                            <div class="tk-sales-filters">
+                                <label id="sales-owner-filter-wrap" class="tk-sales-filter">
+                                    <span>Pemilik</span>
+                                    <select id="sales-analytics-owner-filter" onchange="window.handleMainAnalyticsOwnerChange?.()"><option value="ALL">Semua Vendor & Admin</option></select>
+                                </label>
+                                <label class="tk-sales-filter">
+                                    <span>Event</span>
+                                    <select id="sales-analytics-event-filter" onchange="window.renderMainSalesAnalytics?.()"><option value="ALL">Semua Event</option></select>
+                                </label>
+                                <label class="tk-sales-filter">
+                                    <span>Periode</span>
+                                    <select id="sales-analytics-period-filter" onchange="window.renderMainSalesAnalytics?.()">
+                                        <option value="7">7 hari</option>
+                                        <option value="30" selected>30 hari</option>
+                                        <option value="90">90 hari</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="tk-sales-kpis">
+                            <article><span>Nilai penjualan</span><strong id="sales-kpi-revenue">Rp 0</strong><small>Transaksi APPROVED</small></article>
+                            <article><span>Total transaksi</span><strong id="sales-kpi-orders">0</strong><small id="sales-kpi-buyers">0 pembeli unik</small></article>
+                            <article><span>Tanggal paling ramai</span><strong id="sales-kpi-peak-date">-</strong><small id="sales-kpi-peak-date-detail">Belum ada transaksi</small></article>
+                            <article><span>Jam paling ramai</span><strong id="sales-kpi-peak-hour">-</strong><small id="sales-kpi-peak-hour-detail">Belum ada transaksi</small></article>
+                        </div>
+                        <div class="tk-sales-chart-grid">
+                            <article class="tk-sales-chart-card">
+                                <div><h4>Penjualan per Event</h4><p>Nilai penjualan event teratas.</p></div>
+                                <div class="tk-sales-canvas-wrap"><canvas id="sales-chart-event"></canvas></div>
+                            </article>
+                            <article class="tk-sales-chart-card">
+                                <div><h4>Tanggal Pembelian</h4><p>Jumlah transaksi per hari.</p></div>
+                                <div class="tk-sales-canvas-wrap"><canvas id="sales-chart-date"></canvas></div>
+                            </article>
+                            <article class="tk-sales-chart-card">
+                                <div><h4>Jam Pembelian</h4><p>Waktu transaksi paling aktif.</p></div>
+                                <div class="tk-sales-canvas-wrap"><canvas id="sales-chart-hour"></canvas></div>
+                            </article>
+                        </div>
+                    </section>
+
                     <div class="glass-card rounded-2xl p-6 mb-8 border border-white/10 shadow-[0_0_25px_rgba(34,197,94,0.1)]">
                         <h3 class="font-bold text-white mb-4 text-lg"><i class="fa-solid fa-qrcode text-green-400 mr-2"></i> Statistik Gate (Live Check-in)</h3>
                         <div class="flex flex-col md:flex-row items-center gap-6">
@@ -906,9 +954,53 @@
                     </div>
                     <div id="vendor-detail-view" class="hidden">
                         <button type="button" onclick="closeVendorDetail()" class="text-gray-400 hover:text-white mb-6 transition-colors font-medium"><i class="fa-solid fa-arrow-left mr-2"></i> Kembali ke Daftar Vendor</button>
-                        <div class="flex justify-between items-center mb-6">
-                            <h2 class="text-2xl font-bold text-white">Dashboard: <span id="vd-name-title" class="text-amber-500"></span></h2>
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                            <div class="flex items-center gap-4">
+                                <div class="h-16 w-16 overflow-hidden rounded-2xl border border-cyan-400/30 bg-slate-950/80 flex items-center justify-center">
+                                    <img id="vd-logo-img" class="hidden h-full w-full object-contain p-2" alt="Logo Vendor" referrerpolicy="no-referrer">
+                                    <i id="vd-logo-fallback" class="fa-solid fa-store text-2xl text-cyan-300"></i>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] uppercase tracking-[0.3em] text-cyan-300">Dashboard Vendor</p>
+                                    <h2 class="text-2xl font-bold text-white"><span id="vd-name-title" class="text-amber-500"></span></h2>
+                                </div>
+                            </div>
                         </div>
+
+                        <section id="vd-sales-analytics-panel" class="tk-sales-analytics mb-8">
+                            <div class="tk-sales-analytics-head">
+                                <div>
+                                    <p class="tk-sales-eyebrow"><i class="fa-solid fa-chart-line"></i> Analitik Vendor</p>
+                                    <h3 class="tk-sales-title">Grafik Penjualan Event Vendor</h3>
+                                    <p class="tk-sales-subtitle">Tanggal dan jam pembelian paling ramai untuk Vendor ini.</p>
+                                </div>
+                                <div class="tk-sales-filters">
+                                    <label class="tk-sales-filter">
+                                        <span>Event</span>
+                                        <select id="vd-sales-event-filter" onchange="window.renderVendorDetailSalesAnalytics?.()"><option value="ALL">Semua Event Vendor</option></select>
+                                    </label>
+                                    <label class="tk-sales-filter">
+                                        <span>Periode</span>
+                                        <select id="vd-sales-period-filter" onchange="window.renderVendorDetailSalesAnalytics?.()">
+                                            <option value="7">7 hari</option>
+                                            <option value="30" selected>30 hari</option>
+                                            <option value="90">90 hari</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="tk-sales-kpis">
+                                <article><span>Nilai penjualan</span><strong id="vd-sales-kpi-revenue">Rp 0</strong><small>Transaksi APPROVED</small></article>
+                                <article><span>Total transaksi</span><strong id="vd-sales-kpi-orders">0</strong><small id="vd-sales-kpi-buyers">0 pembeli unik</small></article>
+                                <article><span>Tanggal paling ramai</span><strong id="vd-sales-kpi-peak-date">-</strong><small id="vd-sales-kpi-peak-date-detail">Belum ada transaksi</small></article>
+                                <article><span>Jam paling ramai</span><strong id="vd-sales-kpi-peak-hour">-</strong><small id="vd-sales-kpi-peak-hour-detail">Belum ada transaksi</small></article>
+                            </div>
+                            <div class="tk-sales-chart-grid">
+                                <article class="tk-sales-chart-card"><div><h4>Penjualan per Event</h4><p>Event Vendor dengan nilai penjualan tertinggi.</p></div><div class="tk-sales-canvas-wrap"><canvas id="vd-sales-chart-event"></canvas></div></article>
+                                <article class="tk-sales-chart-card"><div><h4>Tanggal Pembelian</h4><p>Jumlah transaksi per hari.</p></div><div class="tk-sales-canvas-wrap"><canvas id="vd-sales-chart-date"></canvas></div></article>
+                                <article class="tk-sales-chart-card"><div><h4>Jam Pembelian</h4><p>Waktu transaksi paling aktif.</p></div><div class="tk-sales-canvas-wrap"><canvas id="vd-sales-chart-hour"></canvas></div></article>
+                            </div>
+                        </section>
                         
                         <div class="glass-card rounded-2xl p-6 mb-8 border border-white/10 shadow-[0_0_25px_rgba(34,197,94,0.1)]">
                             <h3 class="font-bold text-white mb-4 text-lg"><i class="fa-solid fa-qrcode text-green-400 mr-2"></i> Statistik Gate (Live Check-in)</h3>
@@ -992,9 +1084,9 @@
                     <div class="glass-card rounded-2xl p-6">
                         <div class="flex justify-between items-center mb-6">
                             <div><h2 class="text-2xl font-bold"><i class="fa-solid fa-building-user text-amber-500 mr-2"></i> Manajemen Vendor (EO)</h2><p class="text-sm text-gray-400 mt-1">Vendor dapat login, membuat event, dan mengelola tiket mereka sendiri secara terpisah.</p></div>
-                            <button type="button" onclick="openModal('add-vendor-modal')" class="glow-button text-dark font-bold px-4 py-2 rounded-lg text-sm cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.3)]"><i class="fa-solid fa-plus mr-1"></i> Buat Akun Vendor</button>
+                            <button type="button" onclick="document.getElementById('add-vendor-modal')?.querySelector('form')?.reset(); openModal('add-vendor-modal'); window.resetVendorLogoPreview?.()" class="glow-button text-dark font-bold px-4 py-2 rounded-lg text-sm cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.3)]"><i class="fa-solid fa-plus mr-1"></i> Buat Akun Vendor</button>
                         </div>
-                        <div class="overflow-x-auto"><table class="w-full text-left text-sm text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-dark/50 border-b border-white/10"><tr><th class="px-4 py-3">Nama EO</th><th class="px-4 py-3">Username Login</th><th class="px-4 py-3 text-center">Fee Platform</th><th class="px-4 py-3 text-right">Aksi</th></tr></thead><tbody id="admin-vendor-table"></tbody></table></div>
+                        <div class="overflow-x-auto"><table class="w-full text-left text-sm text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-dark/50 border-b border-white/10"><tr><th class="px-4 py-3">Logo</th><th class="px-4 py-3">Nama EO</th><th class="px-4 py-3">Username Login</th><th class="px-4 py-3 text-center">Fee Platform</th><th class="px-4 py-3 text-right">Aksi</th></tr></thead><tbody id="admin-vendor-table"></tbody></table></div>
                     </div>
                 </div>
 
@@ -1003,7 +1095,7 @@
                         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-6">
                             <div><h2 class="text-2xl font-bold"><i class="fa-solid fa-calendar-days text-amber-500 mr-2"></i> Manajemen Event</h2><p id="admin-event-list-label" class="text-sm text-amber-400 mt-1 hidden">Daftar Semua Event</p><p class="text-xs text-gray-400 mt-1">Setiap Vendor dapat membuat, mengedit, dan menghapus event miliknya sendiri. Super Admin dapat mengelola seluruh event.</p></div>
                             <div class="flex flex-wrap gap-3">
-                                <button type="button" onclick="openModal('add-event-modal'); document.getElementById('form-add-event').reset(); document.getElementById('ev-kategori-custom').classList.add('hidden'); document.getElementById('ev-sport-season-box').classList.add('hidden'); document.getElementById('btn-save-event').innerText = 'Publish Event'; window.editEventKey=null; document.getElementById('ev-fasilitas').classList.add('hidden'); document.getElementById('ev-custom-form-box').classList.add('hidden'); document.getElementById('ev-use-custom-form').checked = false; document.getElementById('ev-use-tribun').checked = false; document.getElementById('ev-enable-raffle').checked = false; document.getElementById('ev-tribun-box').classList.add('hidden'); document.getElementById('ev-tribun-list').innerHTML = '';" class="glow-button text-dark font-bold px-4 py-2 rounded-lg text-sm cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.3)]"><i class="fa-solid fa-plus mr-1"></i> Tambah Event</button>
+                                <button type="button" onclick="openModal('add-event-modal'); document.getElementById('form-add-event').reset(); document.getElementById('ev-kategori-custom').classList.add('hidden'); document.getElementById('ev-sport-season-box').classList.add('hidden'); document.getElementById('btn-save-event').innerText = 'Publish Event'; window.editEventKey=null; document.getElementById('ev-fasilitas').classList.add('hidden'); document.getElementById('ev-custom-form-box').classList.add('hidden'); document.getElementById('ev-use-custom-form').checked = false; document.getElementById('ev-use-tribun').checked = false; document.getElementById('ev-enable-raffle').checked = false; document.getElementById('ev-tribun-box').classList.add('hidden'); document.getElementById('ev-tribun-list').innerHTML = ''; window.applyCurrentVendorBrandToEventForm?.();" class="glow-button text-dark font-bold px-4 py-2 rounded-lg text-sm cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.3)]"><i class="fa-solid fa-plus mr-1"></i> Tambah Event</button>
                             </div>
                         </div>
                         <div class="overflow-x-auto"><table class="w-full text-left text-sm text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-dark/50 border-b border-white/10"><tr><th class="px-4 py-3">Event</th><th class="px-4 py-3">Kategori</th><th class="px-4 py-3">Vendor Pemilik</th><th class="px-4 py-3">Status</th><th class="px-4 py-3 text-right">Aksi</th></tr></thead><tbody id="admin-events-table"></tbody></table></div>
@@ -1248,6 +1340,20 @@
                 <form onsubmit="handleAddVendor(event); return false;" class="space-y-4 relative z-10">
                     <input type="text" id="vend-name" required class="w-full bg-darker border border-gray-600 rounded-lg p-3 text-white" placeholder="Nama Event Organizer (EO)">
                     <input type="text" id="vend-user" required class="w-full bg-darker border border-gray-600 rounded-lg p-3 text-white" placeholder="Username (tanpa spasi)">
+                    <div class="tk-vendor-logo-field rounded-2xl border border-cyan-400/25 bg-cyan-400/5 p-4">
+                        <div class="flex items-start gap-4">
+                            <div class="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80 flex items-center justify-center">
+                                <img id="vend-logo-preview" alt="Preview logo Vendor" class="hidden h-full w-full object-contain p-2" referrerpolicy="no-referrer">
+                                <i id="vend-logo-placeholder" class="fa-solid fa-image text-2xl text-cyan-300/60"></i>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <label for="vend-logo-url" class="mb-1 block text-xs font-bold text-cyan-300">URL Logo Vendor</label>
+                                <input type="url" id="vend-logo-url" required oninput="window.previewVendorLogoUrl?.(this.value)" class="w-full rounded-lg border border-cyan-400/40 bg-darker p-3 text-white outline-none focus:border-cyan-300" placeholder="https://.../logo-vendor.png">
+                                <p class="mt-2 text-[11px] leading-relaxed text-gray-400"><strong class="text-yellow-300">Ukuran wajib: 800 × 800 px.</strong> Gunakan PNG atau WebP, bentuk persegi, latar transparan, dan logo berada di tengah agar tidak terpotong.</p>
+                                <p id="vend-logo-status" class="mt-1 text-[11px] text-gray-500">Masukkan URL untuk memeriksa ukuran gambar.</p>
+                            </div>
+                        </div>
+                    </div>
                     <div class="relative"><input type="password" id="vend-pass" required class="w-full bg-darker border border-gray-600 rounded-lg p-3 text-white pr-10 w-full" placeholder="Password (Min 6 Karakter)"><button type="button" onclick="const p=document.getElementById('vend-pass'); p.type=p.type==='password'?'text':'password'; this.innerHTML = p.type==='password'?'<i class=\'fa-regular fa-eye\'></i>':'<i class=\'fa-regular fa-eye-slash\'></i>';" class="absolute right-3 top-3 text-gray-400 cursor-pointer z-20 p-1"><i class="fa-regular fa-eye"></i></button></div>
                     <div class="bg-dark p-3 rounded-lg border border-purple-500/30 shadow-inner mt-2 space-y-3">
                         <div>
@@ -1273,7 +1379,7 @@
                 <form id="form-add-event" onsubmit="handleAddEvent(event); return false;">
                     <div id="ev-owner-container" class="mb-4 bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl hidden">
                         <label class="text-xs text-amber-500 font-bold block mb-1">Pilih Pemilik Event (Vendor/EO)</label>
-                        <select id="ev-owner" class="w-full bg-darker border border-amber-500/50 rounded p-2 text-white cursor-pointer outline-none"></select>
+                        <select id="ev-owner" onchange="window.applySelectedVendorBrandToEventForm?.()" class="w-full bg-darker border border-amber-500/50 rounded p-2 text-white cursor-pointer outline-none"></select>
                     </div>
                     <div class="bg-darker p-4 rounded-xl border border-white/5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -1295,7 +1401,7 @@
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div class="md:col-span-2"><label class="text-xs text-gray-400">Banner Event Landscape (Rekomendasi 1200x400 px)</label><input type="url" id="ev-banner" required class="w-full bg-dark border border-gray-600 rounded p-2 text-white"></div>
                                 <div><label class="text-xs text-gray-400">Nama Penyelenggara / EO</label><input type="text" id="ev-org-name" required class="w-full bg-dark border border-gray-600 rounded p-2 text-white"></div>
-                                <div><label class="text-xs text-gray-400">URL Logo Penyelenggara</label><input type="url" id="ev-org-logo" class="w-full bg-dark border border-gray-600 rounded p-2 text-white"></div>
+                                <div><label class="text-xs text-gray-400">URL Logo Penyelenggara</label><input type="url" id="ev-org-logo" class="w-full bg-dark border border-gray-600 rounded p-2 text-white"><p class="mt-1 text-[10px] text-gray-500">Otomatis memakai logo akun Vendor. Ukuran ideal 800 × 800 px.</p></div>
                                 <div class="md:col-span-2"><label class="text-xs text-gray-400">URL Link Sosial Media Penyelenggara</label><input type="url" id="ev-org-sosmed" class="w-full bg-dark border border-gray-600 rounded p-2 text-white"></div>
                                 <div class="md:col-span-2"><label class="text-xs text-gray-400">Deskripsi Acara Lengkap</label><textarea id="ev-desc" rows="4" required class="w-full bg-dark border border-gray-600 rounded p-2 text-white custom-scroll format-teks-rapi leading-relaxed"></textarea></div>
                                 <div class="md:col-span-2 bg-dark border border-gray-600 p-4 rounded-xl">
