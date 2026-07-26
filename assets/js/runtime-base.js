@@ -3076,6 +3076,7 @@
                         } catch(e) { console.error(e); }
                     } else {
                         window.detachUserDashboardListeners?.();
+                        window.detachAdminDataListeners?.();
                         window.currentUserData = null; window.isSuperAdmin = false; window.isVendor = false; window.isScanner = false;
                         if (window.__userProfileListenerRef && auth?.currentUser) {
                             try { db.ref('users/' + auth.currentUser.uid).off('value', window.__userProfileListenerRef); } catch (e) {}
@@ -3093,15 +3094,29 @@
         function renderWAAdminGrid(whatsappData = {}) {
             const wGrid = document.getElementById('admin-wa-grid');
             if(!wGrid) return;
-            wGrid.innerHTML = '';
-            Object.keys(whatsappData).forEach(k => {
-                const wa = whatsappData[k];
-                const waOwner = wa.ownerId || 'SUPER_ADMIN';
-                const isMine = waOwner === window.currentUserData?.uid || (window.isSuperAdmin && waOwner === 'SUPER_ADMIN');
-                if(!isMine) return;
-                wGrid.innerHTML += `<div class="bg-darker p-3 rounded flex justify-between items-center text-sm"><div><b>${wa.name}</b><br><span class="text-amber-500">${wa.number}</span></div><button onclick="window.deleteWaSetting('${k}')" class="text-red-400"><i class="fa-solid fa-trash"></i></button></div>`;
+            const ownerId = window.isSuperAdmin ? 'SUPER_ADMIN' : (window.currentUserData?.uid || '');
+            const entries = Object.entries(whatsappData || {}).filter(([, wa]) => {
+                const waOwner = wa?.ownerId || 'SUPER_ADMIN';
+                return !!ownerId && waOwner === ownerId;
             });
+            wGrid.innerHTML = '';
+            entries.forEach(([k, wa]) => {
+                const safeName = escapeHtml(wa?.name || 'Admin');
+                const safeNumber = escapeHtml(wa?.number || '');
+                wGrid.innerHTML += `<div class="bg-darker p-3 rounded flex justify-between items-center text-sm"><div><b>${safeName}</b><br><span class="text-amber-500">${safeNumber}</span></div><button type="button" onclick="window.deleteWaSetting('${escapeHtml(k)}')" class="text-red-400" aria-label="Hapus nomor ${safeName}"><i class="fa-solid fa-trash"></i></button></div>`;
+            });
+            if (!entries.length) wGrid.innerHTML = '<div class="md:col-span-3 rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-gray-500">Belum ada nomor WhatsApp Admin.</div>';
+            const countEl = document.getElementById('wa-count');
+            if (countEl) countEl.textContent = `${entries.length} / 20 nomor`;
+            const submitBtn = document.getElementById('wa-submit');
+            if (submitBtn) {
+                submitBtn.disabled = entries.length >= 20;
+                submitBtn.classList.toggle('opacity-50', entries.length >= 20);
+                submitBtn.classList.toggle('cursor-not-allowed', entries.length >= 20);
+                submitBtn.textContent = entries.length >= 20 ? 'Batas 20 Tercapai' : 'Tambah';
+            }
         }
+        window.renderWAAdminGrid = renderWAAdminGrid;
 
         window.getTaxSettings = function(userData = {}) {
             const rawTax = parseFloat(userData?.tax || 0) || 0;
@@ -4145,79 +4160,141 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         };
 
         function listenToAdminData() {
-            db.ref('tickets').on('value', snap => {
+            window.detachAdminDataListeners?.();
+            window.__adminDataListeners = [];
+            const attach = (query, callback) => {
+                query.on('value', callback);
+                window.__adminDataListeners.push({ query, callback });
+            };
+            window.detachAdminDataListeners = function() {
+                (window.__adminDataListeners || []).forEach(item => {
+                    try { item.query.off('value', item.callback); } catch (e) {}
+                });
+                window.__adminDataListeners = [];
+                window.adminDataListening = false;
+            };
+
+            let paymentParts = {};
+            let userParts = {};
+            const mergeParts = parts => Object.assign({}, ...Object.values(parts || {}).filter(Boolean));
+
+            const renderPayments = () => {
+                const data = mergeParts(paymentParts);
+                window.globalPaymentsData = data;
+                window.__adminPaymentWindowCache = { at: Date.now(), roleKey: window.getCurrentAdminScopeKey?.() || '', data };
+                window.updateFinanceSummaryCards?.();
+                window.scheduleSalesAnalyticsRender?.(80);
+                if (window.isSuperAdmin || window.isVendor) {
+                    clearTimeout(window.__adminPaymentRenderTimer);
+                    window.__adminPaymentRenderTimer = setTimeout(() => {
+                        try { window.refreshAdminPaymentViews?.(); } catch(e) { console.warn('refreshAdminPaymentViews failed', e); }
+                    }, 140);
+                }
+            };
+
+            const renderUsers = () => {
+                const data = mergeParts(userParts);
+                window.usersMapCache = data;
+                try { window.populatePaymentSettingsInputs?.(); } catch (e) { console.warn('populate payment inputs', e); }
+                const ut = document.getElementById('admin-users-table');
+                const st = document.getElementById('admin-scanners-table');
+                const vt = document.getElementById('admin-vendor-table');
+                if (ut) ut.innerHTML = '';
+                if (st) st.innerHTML = '';
+                if (vt) vt.innerHTML = '';
+                let scannerCount = 0;
+                let pembeliCount = 0;
+                let vendorSelectHtml = '<option value="SUPER_ADMIN">Super Admin (Saya)</option>';
+
+                Object.entries(data).sort((a, b) => Number(b[1]?.createdAt || 0) - Number(a[1]?.createdAt || 0)).forEach(([k, u]) => {
+                    if (!u) return;
+                    const role = u.role || 'User';
+                    const safeName = escapeHtml(u.nama || '-');
+                    const safeUsername = escapeHtml(u.username || '-');
+                    const safeEmail = escapeHtml(u.email || '-');
+                    if (role === 'Vendor') {
+                        if (!window.isSuperAdmin) return;
+                        vendorSelectHtml += `<option value="${escapeHtml(k)}">${safeName}</option>`;
+                        const safeVendorLogo = window.safeImageUrl(u.logoUrl || u.vendorLogoUrl || '', '');
+                        const vendorLogoCell = safeVendorLogo
+                            ? `<img src="${safeVendorLogo}" alt="Logo ${safeName}" class="tk-vendor-logo-cell" referrerpolicy="no-referrer">`
+                            : '<div class="tk-vendor-logo-cell flex items-center justify-center text-cyan-300"><i class="fa-solid fa-store"></i></div>';
+                        if (vt) vt.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3">${vendorLogoCell}</td><td class="px-4 py-3 font-bold text-amber-500">${safeName}</td><td class="px-4 py-3">${safeUsername}</td><td class="px-4 py-3 text-center text-purple-400 font-bold bg-purple-500/10 rounded">${Number(u.platform_fee || 0)}%</td><td class="px-4 py-3 text-right"><div class="inline-flex gap-2"><button type="button" onclick="window.openEditVendorModal('${escapeHtml(k)}')" class="text-cyan-200 cursor-pointer bg-cyan-500/20 px-3 py-1 rounded text-xs font-bold hover:bg-cyan-500 hover:text-slate-950 transition-colors"><i class="fa-solid fa-pen-to-square mr-1"></i> Edit</button><button type="button" onclick="window.deleteVendorAccount('${escapeHtml(k)}')" class="text-red-400 cursor-pointer bg-red-500/20 px-3 py-1 rounded text-xs font-bold hover:bg-red-500 hover:text-white transition-colors"><i class="fa-solid fa-ban mr-1"></i> Banned & Hapus</button></div></td></tr>`;
+                        return;
+                    }
+                    if (role.includes('Scanner')) {
+                        const owner = u.ownerId || 'SUPER_ADMIN';
+                        const isMine = owner === window.currentUserData?.uid || (window.isSuperAdmin && owner === 'SUPER_ADMIN');
+                        if (window.isVendor && !isMine) return;
+                        scannerCount += 1;
+                        if (isMine && st) st.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3">${safeName}</td><td class="px-4 py-3">${safeUsername}</td><td class="px-4 py-3">${escapeHtml(role)}</td><td class="px-4 py-3 text-right"><button type="button" onclick="window.deleteScannerAccount('${escapeHtml(k)}')" class="text-red-400 cursor-pointer"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+                        return;
+                    }
+                    if (role === 'User') {
+                        const tCountOwn = window.userTicketCountOwn?.[k] || 0;
+                        if (window.isVendor && tCountOwn === 0) return;
+                        if (window.isSuperAdmin && tCountOwn === 0 && !window.userTicketCount?.[k]) return;
+                        pembeliCount += 1;
+                        if (ut) ut.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3">${safeName}</td><td class="px-4 py-3">${escapeHtml(u.phone || '-')}</td><td class="px-4 py-3 text-xs">${safeEmail}</td><td class="px-4 py-3 text-xs text-gray-400">${u.createdAt ? new Date(u.createdAt).toLocaleDateString('id-ID') : '-'}</td><td class="px-4 py-3 font-bold text-amber-500">${tCountOwn} Tiket</td></tr>`;
+                    }
+                });
+                safeSetText('dash-scanners', scannerCount);
+                safeSetText('dash-users', pembeliCount);
+                const evOwnerSel = document.getElementById('ev-owner');
+                if (evOwnerSel) evOwnerSel.innerHTML = vendorSelectHtml;
+                if (window.isSuperAdmin) window.updateVendorDashboardList?.();
+                window.populateMainSalesAnalyticsFilters?.();
+            };
+
+            const hydrateTicketUsers = async ticketData => {
+                const ids = [...new Set(Object.values(ticketData || {}).map(t => t?.uid).filter(Boolean))].slice(0, 500);
+                const missing = ids.filter(uid => !window.usersMapCache?.[uid] && !mergeParts(userParts)[uid]);
+                for (let i = 0; i < missing.length; i += 12) {
+                    const batch = await Promise.all(missing.slice(i, i + 12).map(async uid => {
+                        try { return [uid, (await db.ref(`users/${uid}`).once('value')).val()]; } catch (e) { return [uid, null]; }
+                    }));
+                    const patch = {};
+                    batch.forEach(([uid, value]) => { if (value) patch[uid] = value; });
+                    userParts.ticketUsers = { ...(userParts.ticketUsers || {}), ...patch };
+                }
+                if (missing.length) renderUsers();
+            };
+
+            const ticketQuery = window.isVendor
+                ? db.ref('tickets').orderByChild('ownerId').equalTo(window.currentUserData?.uid || '').limitToLast(window.ADMIN_TICKET_QUERY_LIMIT || 5000)
+                : db.ref('tickets').orderByChild('createdAt').limitToLast(window.ADMIN_TICKET_QUERY_LIMIT || 5000);
+            attach(ticketQuery, snap => {
                 const data = snap.val() || {};
                 window.renderAdminTicketTablesFromCache(data);
                 window.repairLegacyUpgradedTickets?.(data);
+                hydrateTicketUsers(data).catch(err => console.warn('hydrate ticket users', err));
             });
 
-            db.ref('payments').on('value', snap => {
-                const data = snap.val() || {}; 
-                window.globalPaymentsData = data; 
-                window.updateFinanceSummaryCards();
-                window.repairMissingTicketsForApprovedPayments?.();
-                if (window.isSuperAdmin || window.isVendor) {
-                    setTimeout(() => {
-                        try { window.refreshAdminPaymentViews?.(); } catch(e) { console.warn('refreshAdminPaymentViews failed', e); }
-                    }, 120);
-                }
-            });
+            if (window.isVendor) {
+                const query = db.ref('payments').orderByChild('ownerId').equalTo(window.currentUserData?.uid || '').limitToLast(window.ADMIN_PENDING_QUERY_LIMIT || 5000);
+                attach(query, snap => { paymentParts = { vendor: snap.val() || {} }; renderPayments(); });
+            } else {
+                attach(db.ref('payments').orderByChild('status').equalTo('PENDING').limitToLast(window.ADMIN_PENDING_QUERY_LIMIT || 5000), snap => { paymentParts.pending = snap.val() || {}; renderPayments(); });
+                attach(db.ref('payments').orderByChild('status').equalTo('PROCESSING').limitToLast(500), snap => { paymentParts.processing = snap.val() || {}; renderPayments(); });
+                attach(db.ref('payments').orderByChild('createdAt').limitToLast(window.ADMIN_RECENT_QUERY_LIMIT || 1500), snap => { paymentParts.recent = snap.val() || {}; renderPayments(); });
+            }
 
-            db.ref('users').on('value', snap => {
-                const data = snap.val() || {}; window.usersMapCache = data;
-                try {
-                    if (window.populatePaymentSettingsInputs) window.populatePaymentSettingsInputs();
-                } catch (e) { console.warn('Error populating payment inputs from usersMapCache', e); }
-                const ut = document.getElementById('admin-users-table'); const st = document.getElementById('admin-scanners-table'); const vt = document.getElementById('admin-vendor-table');
-                if(ut) ut.innerHTML = ''; if(st) st.innerHTML = ''; if(vt) vt.innerHTML = '';
-                let scannerCount = 0; let pembeliCount = 0;
-                
-                let vendorSelectHtml = '<option value="SUPER_ADMIN">Super Admin (Saya)</option>';
-
-                Object.keys(data).reverse().forEach(k => {
-                    const u = data[k]; const role = u.role || 'User';
-                    if (role === 'Vendor') {
-                        if(window.isSuperAdmin) {
-                            vendorSelectHtml += `<option value="${k}">${u.nama}</option>`;
-                            const safeVendorLogo = window.safeImageUrl(u.logoUrl || u.vendorLogoUrl || '', '');
-                            const vendorLogoCell = safeVendorLogo
-                                ? `<img src="${safeVendorLogo}" alt="Logo ${escapeHtml(u.nama || 'Vendor')}" class="tk-vendor-logo-cell" referrerpolicy="no-referrer">`
-                                : `<div class="tk-vendor-logo-cell flex items-center justify-center text-cyan-300"><i class="fa-solid fa-store"></i></div>`;
-                            if (vt) vt.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3">${vendorLogoCell}</td><td class="px-4 py-3 font-bold text-amber-500">${escapeHtml(u.nama || 'Vendor')}</td><td class="px-4 py-3">${escapeHtml(u.username || '-')}</td><td class="px-4 py-3 text-center text-purple-400 font-bold bg-purple-500/10 rounded">${u.platform_fee || 0}%</td><td class="px-4 py-3 text-right"><div class="inline-flex gap-2"><button type="button" onclick="window.openEditVendorModal('${k}')" class="text-cyan-200 cursor-pointer bg-cyan-500/20 px-3 py-1 rounded text-xs font-bold hover:bg-cyan-500 hover:text-slate-950 transition-colors"><i class="fa-solid fa-pen-to-square mr-1"></i> Edit</button><button type="button" onclick="window.deleteVendorAccount('${k}')" class="text-red-400 cursor-pointer bg-red-500/20 px-3 py-1 rounded text-xs font-bold hover:bg-red-500 hover:text-white transition-colors"><i class="fa-solid fa-ban mr-1"></i> Banned & Hapus</button></div></td></tr>`;
-                        }
-                    }
-                    else if(role.includes('Scanner')) {
-                        const uOwner = u.ownerId || 'SUPER_ADMIN';
-                        const isMine = uOwner === window.currentUserData?.uid || (window.isSuperAdmin && uOwner === 'SUPER_ADMIN');
-                        
-                        // Isolasi Vendor
-                        if (window.isVendor && !isMine) return;
-                        
-                        // Dashboard Global Calc Super Admin
-                        scannerCount++;
-                        
-                        // Isolasi Render Tabel
-                        if (!isMine) return;
-                        if(st) st.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3">${u.nama}</td><td class="px-4 py-3">${u.username}</td><td class="px-4 py-3">${role}</td><td class="px-4 py-3 text-right"><button type="button" onclick="window.deleteScannerAccount('${k}')" class="text-red-400 cursor-pointer"><i class="fa-solid fa-trash"></i></button></td></tr>`;
-                    } else if (role === 'User') {
-                        const tCountTotal = window.userTicketCount ? (window.userTicketCount[k] || 0) : 0;
-                        const tCountOwn = window.userTicketCountOwn ? (window.userTicketCountOwn[k] || 0) : 0;
-
-                        if (window.isVendor && tCountOwn === 0) return;
-                        
-                        // Dashboard Global Calc Super Admin
-                        pembeliCount++;
-                        
-                        // Isolasi Render Tabel
-                        if (window.isSuperAdmin && tCountOwn === 0) return;
-
-                        if(ut) ut.innerHTML += `<tr class="border-b border-white/5"><td class="px-4 py-3">${u.nama}</td><td class="px-4 py-3">${u.phone || '-'}</td><td class="px-4 py-3 text-xs">${u.email}</td><td class="px-4 py-3 text-xs text-gray-400">${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}</td><td class="px-4 py-3 font-bold text-amber-500">${tCountOwn} Tiket</td></tr>`;
-                    }
+            const recentUsersQuery = db.ref('users').orderByChild('createdAt').limitToLast(window.ADMIN_USER_QUERY_LIMIT || 1500);
+            attach(recentUsersQuery, snap => { userParts.recent = snap.val() || {}; renderUsers(); });
+            if (window.isSuperAdmin) {
+                attach(db.ref('users').orderByChild('role').equalTo('Vendor'), snap => { userParts.vendors = snap.val() || {}; renderUsers(); });
+                attach(db.ref('users').orderByChild('role').equalTo('Scanner Ekonomi'), snap => { userParts.scannerEco = snap.val() || {}; renderUsers(); });
+                attach(db.ref('users').orderByChild('role').equalTo('Scanner VIP'), snap => { userParts.scannerVip = snap.val() || {}; renderUsers(); });
+            } else if (window.currentUserData?.uid) {
+                attach(db.ref(`users/${window.currentUserData.uid}`), snap => {
+                    userParts.self = snap.exists() ? { [window.currentUserData.uid]: snap.val() } : {};
+                    renderUsers();
                 });
-                safeSetText('dash-scanners', scannerCount); safeSetText('dash-users', pembeliCount);
-                const evOwnerSel = document.getElementById('ev-owner'); if (evOwnerSel) evOwnerSel.innerHTML = vendorSelectHtml;
-                if (window.isSuperAdmin) window.updateVendorDashboardList();
-            });
+            }
+
+            setTimeout(() => {
+                window.backfillRecentSalesAnalytics?.(500).then(() => window.scheduleSalesAnalyticsRender?.(50)).catch(err => console.warn('analytics backfill', err));
+            }, 800);
         }
 
         function renderLaporanTable() {
@@ -5188,7 +5265,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 seatValues.forEach(n => bookedSeats.push(n));
             });
 
-            const paymentsSnap = await db.ref('payments').once('value');
+            const paymentsSnap = await db.ref('payments').orderByChild('eventId').equalTo(eventId).once('value');
             const payments = paymentsSnap.val() || {};
             Object.values(payments).forEach(p => {
                 if (!p || p.eventId !== eventId || p.selectedTribun !== selectedTribun || !p.selectedSeat || p.status === 'REJECTED') return;
@@ -5198,6 +5275,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const seatValues = ('' + p.selectedSeat).split(/\s*,\s*/).map(s => parseInt(s, 10)).filter(n => Number.isFinite(n));
                 seatValues.forEach(n => bookedSeats.push(n));
             });
+            const reservedSeats = await window.getActiveSeatReservations?.(eventId, selectedTribun) || [];
+            reservedSeats.map(value => parseInt(value, 10)).filter(Number.isFinite).forEach(n => bookedSeats.push(n));
 
             const available = [];
             for (let i = 1; i <= totalSeats; i++) {
@@ -5281,7 +5360,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if (total <= 0) { btn.disabled = false; btn.innerHTML = "Checkout Pembayaran"; return Swal.fire({icon:'error', title:'Akses Ditolak', text:'Total harga tidak valid!', background:'#1e293b', color:'#fff'}); }
 
             try {
-                const myPaySnap = await db.ref('payments').orderByChild('uid').equalTo(user.uid).once('value'); 
+                const myPaySnap = await db.ref('payments').orderByChild('uid').equalTo(user.uid).limitToLast(50).once('value'); 
                 const myPays = myPaySnap.val() || {}; 
                 let lastBuyTime = 0;
                 Object.values(myPays).forEach(p => { if(p && p.eventId === evId.value) { if(p.createdAt > lastBuyTime) lastBuyTime = p.createdAt; } });
@@ -5367,7 +5446,25 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     payloadSet.selectedSeat = selectedSeat;
                 }
                 if (Object.keys(window.currentCustomFormAnswers || {}).length > 0) { payloadSet.customFormAnswers = window.currentCustomFormAnswers; }
-                await newPayRef.set(payloadSet);
+                let seatReservation = null;
+                try {
+                    if (hasTriBun && useSeatNumber && selectedSeat) {
+                        seatReservation = await window.acquireSeatReservations({
+                            eventId: evId.value,
+                            tribun: selectedTribun,
+                            seats: selectedSeat.split(/\s*,\s*/).filter(Boolean),
+                            paymentId: payKey,
+                            uid: user.uid
+                        });
+                        payloadSet.seatReservationExpiresAt = Date.now() + window.SEAT_RESERVATION_TTL_MS;
+                    }
+                    await newPayRef.set(payloadSet);
+                } catch (writeError) {
+                    if (seatReservation?.acquired?.length) {
+                        await Promise.all(seatReservation.acquired.map(item => db.ref(item.path).remove().catch(() => null)));
+                    }
+                    throw writeError;
+                }
 
                 let payHtml = `<div class="text-left text-sm mb-4"><p>Silakan lakukan pembayaran sebesar <b class="text-green-400 text-lg">${formatRp(total)}</b> menggunakan rekening/e-wallet atau QRIS berikut sebelum mengirim bukti pembayaran:</p>`;
                 if (theBank) {
@@ -5571,7 +5668,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const fallbackPrice = (window.getEventTicketPrice(category, evId) || 0) * (parseInt(qtyOverride || '1', 10) || 1);
             if (!auth || !auth.currentUser || !db || !evId || !category) return { totalPaid: 0, pendingAmount: 0, fullPrice: fallbackPrice, installmentCount: 0, qty: qtyOverride };
             try {
-                const snap = await db.ref('payments').orderByChild('uid').equalTo(auth.currentUser.uid).once('value');
+                const snap = await db.ref('payments').orderByChild('uid').equalTo(auth.currentUser.uid).limitToLast(500).once('value');
                 const payments = snap.val() || {};
                 const groups = Object.values(window.buildDepositGroups(payments, { includeConverted: false })).filter(group =>
                     group.uid === auth.currentUser.uid &&
@@ -5614,7 +5711,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         window.getUserDepositSelection = async function(evId, category, useSeatNumber = true) {
             if (!auth || !auth.currentUser || !db || !evId || !category) return null;
             try {
-                const snap = await db.ref('payments').orderByChild('uid').equalTo(auth.currentUser.uid).once('value');
+                const snap = await db.ref('payments').orderByChild('uid').equalTo(auth.currentUser.uid).limitToLast(500).once('value');
                 const payments = snap.val() || {};
                 const groups = Object.values(window.buildDepositGroups(payments, { includeConverted: false })).filter(group =>
                     group.uid === auth.currentUser.uid &&
@@ -5632,7 +5729,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         window.getUserActiveDepositPlan = async function(evId) {
             if (!auth || !auth.currentUser || !db || !evId) return null;
             try {
-                const snap = await db.ref('payments').orderByChild('uid').equalTo(auth.currentUser.uid).once('value');
+                const snap = await db.ref('payments').orderByChild('uid').equalTo(auth.currentUser.uid).limitToLast(500).once('value');
                 const payments = snap.val() || {};
                 return Object.values(window.buildDepositGroups(payments, { includeConverted: false }))
                     .filter(group => group.uid === auth.currentUser.uid && group.eventId === evId && (group.approvedCount + group.pendingCount) > 0)
@@ -5909,26 +6006,20 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const paymentSnap = await db.ref(`payments/${paymentId}`).once('value');
                 const paymentData = paymentSnap.val() || {};
                 const paymentType = (paymentData.type || '').toString().toUpperCase();
-                const snap = await db.ref('settings/whatsapp').once('value'); const waData = snap.val() || {}; 
-                let targetWaNumbers = [];
-                Object.values(waData).forEach(wa => { 
-                    if (!wa || !wa.number) return;
-                    const waOwner = wa.ownerId || 'SUPER_ADMIN'; 
-                    const ownerData = window.usersMapCache[waOwner] || {};
-                    const isSuperAdminWa = waOwner === 'SUPER_ADMIN' || ownerData.role === 'Super Admin';
-                    if (pOwnerId === 'SUPER_ADMIN') { if (isSuperAdminWa) targetWaNumbers.push(wa.number); } 
-                    else { if (waOwner === pOwnerId) targetWaNumbers.push(wa.number); }
-                });
-                if (targetWaNumbers.length === 0 && pOwnerId !== 'SUPER_ADMIN') { 
-                    Object.values(waData).forEach(wa => { 
-                        if (!wa || !wa.number) return;
-                        const waOwner = wa.ownerId || 'SUPER_ADMIN';
-                        const ownerData = window.usersMapCache[waOwner] || {};
-                        if (waOwner === 'SUPER_ADMIN' || ownerData.role === 'Super Admin') targetWaNumbers.push(wa.number); 
-                    }); 
-                }
+                const requestedOwnerId = pOwnerId || paymentData.ownerId || 'SUPER_ADMIN';
+                const loadOwnerNumbers = async ownerId => {
+                    const snap = await db.ref('settings/whatsapp').orderByChild('ownerId').equalTo(ownerId).limitToFirst(20).once('value');
+                    return Object.values(snap.val() || {}).filter(row => row?.number).map(row => String(row.number).replace(/\D/g, '')).filter(Boolean);
+                };
+                let targetWaNumbers = await loadOwnerNumbers(requestedOwnerId);
+                if (!targetWaNumbers.length && requestedOwnerId !== 'SUPER_ADMIN') targetWaNumbers = await loadOwnerNumbers('SUPER_ADMIN');
+                targetWaNumbers = [...new Set(targetWaNumbers)].sort();
                 if(targetWaNumbers.length === 0) return Swal.fire({icon:'error', title:'Error', text:'Belum ada nomor WA CS yang diatur!', background: '#1e293b', color: '#fff'});
-                const adminWA = targetWaNumbers[Math.floor(Math.random() * targetWaNumbers.length)]; 
+                // Stable round-robin: payment yang sama selalu menuju admin yang sama,
+                // sedangkan payment berbeda tersebar merata ke maksimal 20 nomor.
+                let hash = 0;
+                for (const ch of String(paymentId || '')) hash = ((hash * 31) + ch.charCodeAt(0)) >>> 0;
+                const adminWA = targetWaNumbers[hash % targetWaNumbers.length]; 
                 const escName = (uData.nama || 'User').replace(/[*_`~]/g, '\$&');
                 const escUser = (uData.username || 'user').replace(/[*_`~]/g, '\$&');
                 const escEvent = (eventName || 'Event').replace(/[*_`~]/g, '\$&');
@@ -5984,7 +6075,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const category = pData.category;
             if (!userId || !eventId || !category) return;
 
-            const paySnap = await db.ref('payments').orderByChild('uid').equalTo(userId).once('value');
+            const paySnap = await db.ref('payments').orderByChild('uid').equalTo(userId).limitToLast(500).once('value');
             const payData = paySnap.val() || {};
             const groups = Object.values(window.buildDepositGroups(payData, { includeConverted: true }));
             const group = groups.find(item => item.entries.some(entry => entry.key === paymentKey));
@@ -8104,22 +8195,39 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         
         async function handleSaveWA(e) { 
             e.preventDefault(); 
+            const submitBtn = document.getElementById('wa-submit');
+            const originalText = submitBtn?.textContent || 'Tambah';
             try { 
                 const nameEl = document.getElementById('wa-name');
                 const numEl = document.getElementById('wa-num');
                 if (!nameEl || !numEl) throw new Error('Form tidak lengkap!');
                 if (!window.currentUserData && !window.isSuperAdmin) throw new Error('Silakan login terlebih dahulu!');
                 if (!window.db) throw new Error('Database tidak tersedia!');
-                
+                const name = nameEl.value.trim();
+                const number = numEl.value.replace(/\D/g, '');
+                if (!name || name.length > 60) throw new Error('Nama CS wajib diisi, maksimal 60 karakter.');
+                if (!/^62\d{8,13}$/.test(number)) throw new Error('Nomor WhatsApp harus memakai format 62, contoh 6281234567890.');
                 const ownerId = window.isSuperAdmin ? 'SUPER_ADMIN' : window.currentUserData.uid;
-                await window.db.ref('settings/whatsapp').push({ name: nameEl.value, number: numEl.value, ownerId: ownerId }); 
+                if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Memeriksa...'; }
+                const existingSnap = await window.db.ref('settings/whatsapp').orderByChild('ownerId').equalTo(ownerId).once('value');
+                const existing = existingSnap.val() || {};
+                const rows = Object.values(existing).filter(Boolean);
+                if (rows.length >= 20) throw new Error('Maksimal 20 nomor WhatsApp untuk pemilik event ini.');
+                if (rows.some(row => String(row.number || '').replace(/\D/g, '') === number)) throw new Error('Nomor WhatsApp tersebut sudah terdaftar.');
+                await window.db.ref('settings/whatsapp').push({ 
+                    name, number, ownerId,
+                    createdAt: firebase.database.ServerValue.TIMESTAMP
+                }); 
                 nameEl.value=''; 
                 numEl.value=''; 
-                Toast.fire({icon:'success', title:'WA ditambah!'}); 
+                Toast.fire({icon:'success', title:`WA ditambah (${rows.length + 1}/20)!`}); 
             } catch(err) {
                 Toast.fire({icon:'error', title:err.message}); 
+            } finally {
+                if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = originalText; }
             }
         }
+        window.handleSaveWA = handleSaveWA;
         
         async function handleWebSettingsForm(e) { 
             e.preventDefault(); 
@@ -8534,7 +8642,13 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const netStatus = document.getElementById('scan-net-status');
             const updateNetUI = () => { if(netStatus) { if(navigator.onLine) { netStatus.innerHTML = '<span class="text-green-500 font-bold"><i class="fa-solid fa-wifi"></i> ONLINE</span> - Tersinkronisasi'; syncPendingTickets(); } else { netStatus.innerHTML = '<span class="text-red-500 font-bold"><i class="fa-solid fa-plane-up"></i> OFFLINE</span> - Scan berjalan otomatis'; } } };
             window.addEventListener('online', updateNetUI); window.addEventListener('offline', updateNetUI); updateNetUI();
-            if (typeof db !== 'undefined') { db.ref('tickets').once('value').then(snap => { if(snap.val()) localStorage.setItem('beetix_local_tix', JSON.stringify(snap.val())); }); setInterval(syncPendingTickets, 3000); }
+            if (typeof db !== 'undefined') {
+                const scannerOwnerId = window.currentUserData?.ownerId || (window.isVendor ? window.currentUserData?.uid : 'SUPER_ADMIN');
+                db.ref('tickets').orderByChild('ownerId').equalTo(scannerOwnerId).limitToLast(10000).once('value').then(snap => {
+                    if(snap.val()) localStorage.setItem('beetix_local_tix', JSON.stringify(snap.val()));
+                }).catch(err => console.warn('Offline ticket preload dibatasi:', err));
+                setInterval(syncPendingTickets, 10000);
+            }
         }
 
         async function syncPendingTickets() {
@@ -10418,5 +10532,425 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 Toast.fire({ icon:'error', title:err.message || 'Gagal memperbarui Vendor.' });
             } finally {
                 if (btn) { btn.disabled = false; btn.innerHTML = originalHtml || 'Simpan Perubahan Vendor'; }
+            }
+        };
+        // Tiket Kaka v29: scale hardening for manual approval, analytics summaries,
+        // bounded admin data windows, and atomic seat reservations.
+        window.TIKETKAKA_SCALE_VERSION = 'v29';
+        window.ADMIN_PENDING_QUERY_LIMIT = 5000;
+        window.ADMIN_RECENT_QUERY_LIMIT = 1500;
+        window.ADMIN_TICKET_QUERY_LIMIT = 5000;
+        window.ADMIN_USER_QUERY_LIMIT = 1500;
+        window.SEAT_RESERVATION_TTL_MS = 30 * 60 * 1000;
+        window.__adminPaymentWindowCache = { at: 0, roleKey: '', data: {} };
+
+        window.snapshotObject = function(snapshot) {
+            return snapshot?.val?.() || {};
+        };
+
+        window.mergeDataObjects = function() {
+            return Object.assign({}, ...Array.from(arguments).filter(Boolean));
+        };
+
+        window.getCurrentAdminScopeKey = function() {
+            return window.isVendor ? `VENDOR:${window.currentUserData?.uid || ''}` : 'SUPER_ADMIN';
+        };
+
+        window.loadAdminPaymentWindow = async function(options = {}) {
+            if (!window.db) return {};
+            const force = !!options.force;
+            const roleKey = window.getCurrentAdminScopeKey();
+            const now = Date.now();
+            if (!force && window.__adminPaymentWindowCache.roleKey === roleKey && now - window.__adminPaymentWindowCache.at < 3500) {
+                return window.__adminPaymentWindowCache.data || {};
+            }
+            let data = {};
+            if (window.isVendor) {
+                const uid = window.currentUserData?.uid || '';
+                if (!uid) return {};
+                const snap = await db.ref('payments').orderByChild('ownerId').equalTo(uid).limitToLast(window.ADMIN_PENDING_QUERY_LIMIT).once('value');
+                data = window.snapshotObject(snap);
+            } else {
+                const [pendingSnap, processingSnap, recentSnap] = await Promise.all([
+                    db.ref('payments').orderByChild('status').equalTo('PENDING').limitToLast(window.ADMIN_PENDING_QUERY_LIMIT).once('value'),
+                    db.ref('payments').orderByChild('status').equalTo('PROCESSING').limitToLast(500).once('value'),
+                    db.ref('payments').orderByChild('createdAt').limitToLast(window.ADMIN_RECENT_QUERY_LIMIT).once('value')
+                ]);
+                data = window.mergeDataObjects(window.snapshotObject(recentSnap), window.snapshotObject(processingSnap), window.snapshotObject(pendingSnap));
+            }
+            window.__adminPaymentWindowCache = { at: now, roleKey, data };
+            return data;
+        };
+
+        window.invalidateAdminPaymentWindow = function() {
+            window.__adminPaymentWindowCache.at = 0;
+        };
+
+        window.safeFirebaseKeyPart = function(value) {
+            const raw = String(value == null ? '' : value).trim();
+            if (!raw) return '_';
+            return raw.replace(/[.#$\[\]\/\u0000-\u001F\u007F]/g, '_').slice(0, 120) || '_';
+        };
+
+        window.getSeatReservationPath = function(eventId, tribun, seat) {
+            return `seatReservations/${window.safeFirebaseKeyPart(eventId)}/${window.safeFirebaseKeyPart(tribun)}/${window.safeFirebaseKeyPart(seat)}`;
+        };
+
+        window.acquireSeatReservations = async function({ eventId, tribun, seats, paymentId, uid }) {
+            const cleanSeats = [...new Set((seats || []).map(value => String(value).trim()).filter(Boolean))];
+            if (!eventId || !tribun || !paymentId || !uid || !cleanSeats.length) return { ok: true, acquired: [] };
+            const acquired = [];
+            const now = Date.now();
+            const expiresAt = now + window.SEAT_RESERVATION_TTL_MS;
+            try {
+                for (const seat of cleanSeats) {
+                    const path = window.getSeatReservationPath(eventId, tribun, seat);
+                    const ref = db.ref(path);
+                    const result = await ref.transaction(current => {
+                        const expired = !current || Number(current.expiresAt || 0) <= now;
+                        const mine = current && current.uid === uid && current.paymentId === paymentId;
+                        if (!expired && !mine) return;
+                        return {
+                            eventId,
+                            tribun,
+                            seat,
+                            uid,
+                            paymentId,
+                            status: 'PENDING',
+                            createdAt: current?.createdAt || now,
+                            expiresAt
+                        };
+                    }, undefined, false);
+                    if (!result.committed) throw new Error(`Kursi ${seat} baru saja dipilih pembeli lain. Silakan pilih kursi lain.`);
+                    acquired.push({ path, seat });
+                }
+                return { ok: true, acquired };
+            } catch (error) {
+                await Promise.all(acquired.map(item => db.ref(item.path).remove().catch(() => null)));
+                throw error;
+            }
+        };
+
+        window.releaseSeatReservationsForPayment = async function(paymentId, paymentData = null) {
+            if (!paymentId || !window.db) return;
+            let payment = paymentData;
+            if (!payment) payment = (await db.ref(`payments/${paymentId}`).once('value')).val() || {};
+            const eventId = payment.eventId || '';
+            const tribun = payment.selectedTribun || '';
+            const seats = String(payment.selectedSeat || '').split(/\s*,\s*/).filter(Boolean);
+            if (!eventId || !tribun || !seats.length) return;
+            const updates = {};
+            seats.forEach(seat => { updates[window.getSeatReservationPath(eventId, tribun, seat)] = null; });
+            if (Object.keys(updates).length) await db.ref().update(updates);
+        };
+
+        window.getActiveSeatReservations = async function(eventId, tribun) {
+            if (!eventId || !tribun || !window.db) return [];
+            const ref = db.ref(`seatReservations/${window.safeFirebaseKeyPart(eventId)}/${window.safeFirebaseKeyPart(tribun)}`);
+            const snap = await ref.once('value');
+            const now = Date.now();
+            const active = [];
+            const staleUpdates = {};
+            Object.entries(snap.val() || {}).forEach(([key, row]) => {
+                if (!row || Number(row.expiresAt || 0) <= now) staleUpdates[key] = null;
+                else active.push(String(row.seat || key));
+            });
+            if (Object.keys(staleUpdates).length) ref.update(staleUpdates).catch(() => null);
+            return active;
+        };
+
+        window.getAnalyticsScopeKeys = function(ownerId) {
+            const normalized = ownerId || 'SUPER_ADMIN';
+            if (window.isVendor && !window.isSuperAdmin) return [normalized];
+            return normalized === 'ALL' ? ['ALL'] : ['ALL', normalized];
+        };
+
+        window.recordPaymentAnalyticsOnce = async function(paymentId, paymentData = null) {
+            if (!paymentId || !window.db) return false;
+            let payment = paymentData;
+            if (!payment) payment = (await db.ref(`payments/${paymentId}`).once('value')).val() || {};
+            if ((payment.status || '').toString().toUpperCase() !== 'APPROVED') return false;
+            const amount = Math.max(0, Number(payment.total || 0) || 0);
+            const eventId = payment.eventId || '';
+            const ownerId = payment.ownerId || window.getPaymentOwnerId?.(payment) || 'SUPER_ADMIN';
+            const uid = payment.uid || 'UNKNOWN';
+            const timestamp = Number(payment.approvedAt || payment.ticketCreatedAt || payment.createdAt || Date.now());
+            if (!eventId || amount <= 0 || !timestamp) return false;
+            const claimRef = db.ref(`analytics/paymentClaims/${paymentId}`);
+            const claimNow = Date.now();
+            const claimResult = await claimRef.transaction(current => {
+                if (current?.status === 'COMPLETED') return;
+                if (current?.status === 'CLAIMED' && claimNow - Number(current.claimedAt || 0) < 2 * 60 * 1000) return;
+                return { status: 'CLAIMED', paymentId, ownerId, eventId, claimedAt: claimNow, claimedBy: auth.currentUser?.uid || '' };
+            }, undefined, false);
+            if (!claimResult.committed) return false;
+            const dateKey = window.getAnalyticsDateKey ? window.getAnalyticsDateKey(timestamp) : new Date(timestamp).toISOString().slice(0, 10);
+            const hourKey = String(new Date(timestamp).getHours()).padStart(2, '0');
+            const qty = Math.max(1, Number(payment.qty || 1) || 1);
+            const updates = {};
+            window.getAnalyticsScopeKeys(ownerId).forEach(scope => {
+                const base = `analytics/sales/${scope}/daily/${dateKey}`;
+                updates[`${base}/totals/orders`] = firebase.database.ServerValue.increment(1);
+                updates[`${base}/totals/revenue`] = firebase.database.ServerValue.increment(amount);
+                updates[`${base}/totals/tickets`] = firebase.database.ServerValue.increment(qty);
+                updates[`${base}/hours/${hourKey}/orders`] = firebase.database.ServerValue.increment(1);
+                updates[`${base}/hours/${hourKey}/revenue`] = firebase.database.ServerValue.increment(amount);
+                updates[`${base}/events/${eventId}/totals/orders`] = firebase.database.ServerValue.increment(1);
+                updates[`${base}/events/${eventId}/totals/revenue`] = firebase.database.ServerValue.increment(amount);
+                updates[`${base}/events/${eventId}/totals/tickets`] = firebase.database.ServerValue.increment(qty);
+                updates[`${base}/events/${eventId}/hours/${hourKey}/orders`] = firebase.database.ServerValue.increment(1);
+                updates[`${base}/events/${eventId}/hours/${hourKey}/revenue`] = firebase.database.ServerValue.increment(amount);
+                updates[`${base}/events/${eventId}/buyers/${uid}`] = true;
+                updates[`${base}/buyers/${uid}`] = true;
+                updates[`${base}/updatedAt`] = firebase.database.ServerValue.TIMESTAMP;
+            });
+            updates[`analytics/paymentClaims/${paymentId}/status`] = 'COMPLETED';
+            updates[`analytics/paymentClaims/${paymentId}/completedAt`] = firebase.database.ServerValue.TIMESTAMP;
+            updates[`payments/${paymentId}/analyticsVersion`] = 'v29';
+            updates[`payments/${paymentId}/analyticsAppliedAt`] = firebase.database.ServerValue.TIMESTAMP;
+            await db.ref().update(updates);
+            return true;
+        };
+
+        window.backfillRecentSalesAnalytics = async function(limit = 500) {
+            if (!window.db || (!window.isSuperAdmin && !window.isVendor) || window.__analyticsBackfillRunning) return;
+            const lastRun = Number(sessionStorage.getItem('tiketkaka_analytics_backfill_v29') || 0);
+            if (Date.now() - lastRun < 10 * 60 * 1000) return;
+            window.__analyticsBackfillRunning = true;
+            try {
+                const snap = await db.ref('payments').orderByChild('status').equalTo('APPROVED').limitToLast(Math.max(50, Math.min(1000, limit))).once('value');
+                const rows = Object.entries(snap.val() || {}).filter(([, p]) => !window.isVendor || (p.ownerId || 'SUPER_ADMIN') === window.currentUserData?.uid);
+                for (let i = 0; i < rows.length; i += 8) {
+                    await Promise.all(rows.slice(i, i + 8).map(([id, payment]) => window.recordPaymentAnalyticsOnce(id, payment).catch(err => console.warn('analytics backfill', id, err))));
+                }
+                sessionStorage.setItem('tiketkaka_analytics_backfill_v29', String(Date.now()));
+            } finally {
+                window.__analyticsBackfillRunning = false;
+            }
+        };
+
+        window.loadAggregatedSalesAnalytics = async function({ ownerId = 'ALL', eventId = 'ALL', days = 30 } = {}) {
+            const normalizedDays = Math.max(1, Math.min(90, Number(days || 30)));
+            const now = new Date();
+            const start = new Date(now);
+            start.setHours(0, 0, 0, 0);
+            start.setDate(start.getDate() - (normalizedDays - 1));
+            const startKey = window.getAnalyticsDateKey(start.getTime());
+            const endKey = window.getAnalyticsDateKey(now.getTime());
+            const scope = ownerId === 'ALL' ? 'ALL' : (ownerId || 'ALL');
+            const snap = await db.ref(`analytics/sales/${scope}/daily`).orderByKey().startAt(startKey).endAt(endKey).once('value');
+            const rows = snap.val() || {};
+            const hourlyCounts = Array.from({ length: 24 }, () => 0);
+            const eventBuckets = {};
+            const buyers = new Set();
+            const daily = [];
+            let revenue = 0;
+            let orders = 0;
+            for (let offset = normalizedDays - 1; offset >= 0; offset--) {
+                const date = new Date(now.getTime() - offset * 86400000);
+                const key = window.getAnalyticsDateKey(date.getTime());
+                const day = rows[key] || {};
+                const selected = eventId === 'ALL' ? day : (day.events?.[eventId] || {});
+                const totals = selected.totals || {};
+                const dayOrders = Number(totals.orders || 0);
+                const dayRevenue = Number(totals.revenue || 0);
+                orders += dayOrders;
+                revenue += dayRevenue;
+                daily.push({ key, label: window.formatAnalyticsDate(key), orders: dayOrders, revenue: dayRevenue });
+                Object.entries(selected.hours || {}).forEach(([hour, value]) => {
+                    const index = Number(hour);
+                    if (index >= 0 && index <= 23) hourlyCounts[index] += Number(value?.orders || 0);
+                });
+                Object.keys(selected.buyers || {}).forEach(uid => buyers.add(uid));
+                if (eventId === 'ALL') {
+                    Object.entries(day.events || {}).forEach(([id, eventRow]) => {
+                        const bucket = eventBuckets[id] || { eventId: id, eventName: window.eventDataMap?.[id]?.title || 'Event', orders: 0, revenue: 0 };
+                        bucket.orders += Number(eventRow?.totals?.orders || 0);
+                        bucket.revenue += Number(eventRow?.totals?.revenue || 0);
+                        eventBuckets[id] = bucket;
+                    });
+                } else {
+                    const bucket = eventBuckets[eventId] || { eventId, eventName: window.eventDataMap?.[eventId]?.title || 'Event', orders: 0, revenue: 0 };
+                    bucket.orders += dayOrders;
+                    bucket.revenue += dayRevenue;
+                    eventBuckets[eventId] = bucket;
+                }
+            }
+            const hourly = hourlyCounts.map((count, hour) => ({ hour, label: `${String(hour).padStart(2, '0')}:00`, orders: count }));
+            const byEvent = Object.values(eventBuckets).sort((a, b) => b.revenue - a.revenue || b.orders - a.orders).slice(0, 8);
+            const peakDate = daily.slice().sort((a, b) => b.orders - a.orders || b.revenue - a.revenue)[0];
+            const peakHour = hourly.slice().sort((a, b) => b.orders - a.orders || a.hour - b.hour)[0];
+            return {
+                revenue,
+                orders,
+                buyers: buyers.size,
+                daily,
+                hourly,
+                byEvent,
+                peakDate: peakDate && peakDate.orders > 0 ? [peakDate.key, { orders: peakDate.orders, revenue: peakDate.revenue }] : null,
+                peakHour
+            };
+        };
+
+        // Override analytics rendering to read compact daily summaries instead of every payment.
+        window.renderMainSalesAnalytics = async function() {
+            if (!document.getElementById('sales-analytics-panel')) return;
+            window.populateMainSalesAnalyticsFilters?.();
+            const ownerId = window.isVendor ? (window.currentUserData?.uid || '') : (document.getElementById('sales-analytics-owner-filter')?.value || 'ALL');
+            const eventId = document.getElementById('sales-analytics-event-filter')?.value || 'ALL';
+            const days = Number(document.getElementById('sales-analytics-period-filter')?.value || 30);
+            let analytics = await window.loadAggregatedSalesAnalytics({ ownerId, eventId, days });
+            if (!analytics.orders && Object.keys(window.globalPaymentsData || {}).length) analytics = window.buildSalesAnalyticsData({ ownerId, eventId, days });
+            const subtitle = document.getElementById('sales-analytics-scope');
+            if (subtitle) subtitle.textContent = 'Ringkasan harian v29 • transaksi APPROVED • data dibatasi sesuai pemilik event.';
+            window.updateSalesAnalyticsKpis('sales', analytics);
+            window.renderSalesAnalyticsCharts('sales', analytics);
+        };
+
+        window.renderVendorDetailSalesAnalytics = async function() {
+            const vendorId = window.activeVendorDashId || '';
+            if (!vendorId || !document.getElementById('vd-sales-analytics-panel')) return;
+            window.populateVendorDetailAnalyticsFilters?.(vendorId);
+            const eventId = document.getElementById('vd-sales-event-filter')?.value || 'ALL';
+            const days = Number(document.getElementById('vd-sales-period-filter')?.value || 30);
+            let analytics = await window.loadAggregatedSalesAnalytics({ ownerId: vendorId, eventId, days });
+            if (!analytics.orders && Object.keys(window.globalPaymentsData || {}).length) analytics = window.buildSalesAnalyticsData({ ownerId: vendorId, eventId, days });
+            window.updateSalesAnalyticsKpis('vd', analytics);
+            window.renderSalesAnalyticsCharts('vd', analytics);
+        };
+
+        window.renderAllSalesAnalytics = async function() {
+            try { await window.renderMainSalesAnalytics(); } catch (err) { console.warn('renderMainSalesAnalytics v29', err); }
+            try { await window.renderVendorDetailSalesAnalytics(); } catch (err) { console.warn('renderVendorDetailSalesAnalytics v29', err); }
+        };
+
+        window.scheduleSalesAnalyticsRender = function(delay = 100) {
+            clearTimeout(window.__salesAnalyticsRenderTimer);
+            return new Promise(resolve => {
+                window.__salesAnalyticsRenderTimer = setTimeout(() => {
+                    requestAnimationFrame(async () => {
+                        await window.renderAllSalesAnalytics();
+                        resolve(true);
+                    });
+                }, Math.max(0, Number(delay) || 0));
+            });
+        };
+
+        // Add analytics summary and release temporary seat claims after successful manual approval.
+        const __v29ApprovePayment = window.approvePayment || (typeof approvePayment === 'function' ? approvePayment : null);
+        if (__v29ApprovePayment) {
+            approvePayment = async function() {
+                const args = Array.from(arguments);
+                const paymentId = String(args[1] || '');
+                const result = await __v29ApprovePayment.apply(this, args);
+                if (paymentId) {
+                    try {
+                        const snap = await db.ref(`payments/${paymentId}`).once('value');
+                        const payment = snap.val() || {};
+                        if ((payment.status || '').toString().toUpperCase() === 'APPROVED') {
+                            await Promise.all([
+                                window.recordPaymentAnalyticsOnce(paymentId, payment),
+                                window.releaseSeatReservationsForPayment(paymentId, payment)
+                            ]);
+                            window.invalidateAdminPaymentWindow();
+                        }
+                    } catch (err) { console.warn('v29 post-approval work', err); }
+                }
+                return result;
+            };
+            window.approvePayment = approvePayment;
+        }
+
+        const __v29RejectPayment = typeof rejectPayment === 'function' ? rejectPayment : null;
+        if (__v29RejectPayment) {
+            rejectPayment = async function(key) {
+                const result = await __v29RejectPayment.apply(this, arguments);
+                try { await window.releaseSeatReservationsForPayment(key); } catch (err) { console.warn('release rejected seats', err); }
+                window.invalidateAdminPaymentWindow();
+                return result;
+            };
+            window.rejectPayment = rejectPayment;
+        }
+
+        setTimeout(() => {
+            if (window.isSuperAdmin || window.isVendor) {
+                window.backfillRecentSalesAnalytics(500).then(() => window.scheduleSalesAnalyticsRender(50)).catch(err => console.warn('v29 analytics init', err));
+            }
+        }, 1200);
+
+        // Bounded integrity repair: only recent approved payments are inspected and each
+        // payment uses the paymentId index. This avoids downloading the full payments/tickets trees.
+        window.repairMissingTicketsForApprovedPayments = async function() {
+            if (!db || window.__repairMissingTicketsRunning || window.__ticketCreationLock || (!window.isSuperAdmin && !window.isVendor)) return;
+            const lastRun = Number(sessionStorage.getItem('tiketkaka_ticket_repair_v29') || 0);
+            if (Date.now() - lastRun < 60 * 1000) return;
+            window.__repairMissingTicketsRunning = true;
+            try {
+                const snap = await db.ref('payments').orderByChild('status').equalTo('APPROVED').limitToLast(300).once('value');
+                const rows = Object.entries(snap.val() || {}).filter(([, payment]) => {
+                    const type = (payment?.type || '').toString().toUpperCase();
+                    if (type === 'DEPOSIT' || type === 'UPGRADE') return false;
+                    return !window.isVendor || (payment.ownerId || 'SUPER_ADMIN') === window.currentUserData?.uid;
+                });
+                const affectedEvents = new Set();
+                for (let i = 0; i < rows.length; i += 6) {
+                    await Promise.all(rows.slice(i, i + 6).map(async ([paymentKey, payment]) => {
+                        const expected = window.getExpectedTicketQuantity(payment);
+                        if (Number(payment.ticketIssuedQty || 0) >= expected && payment.ticketCodes) return;
+                        const ticketSnap = await db.ref('tickets').orderByChild('paymentId').equalTo(paymentKey).once('value');
+                        const entries = Object.entries(ticketSnap.val() || {}).map(([ticketKey, ticket]) => ({ ticketKey, ticket }));
+                        const count = window.getCanonicalPaymentTicketEntries(entries, expected).length;
+                        if (count >= expected) return;
+                        await window.ensureTicketsForPayment(paymentKey, payment);
+                        if (payment.eventId) affectedEvents.add(payment.eventId);
+                    }));
+                }
+                for (const eventId of affectedEvents) await window.reconcileEventTicketCounts?.(eventId);
+                sessionStorage.setItem('tiketkaka_ticket_repair_v29', String(Date.now()));
+            } catch (error) {
+                console.warn('bounded ticket repair v29', error);
+            } finally {
+                window.__repairMissingTicketsRunning = false;
+            }
+        };
+
+        window.pruneOverGeneratedTicketsForPayments = async function() {
+            if (!db || window.__ticketPruneLock || (!window.isSuperAdmin && !window.isVendor)) return;
+            const lastRun = Number(sessionStorage.getItem('tiketkaka_ticket_prune_v29') || 0);
+            if (Date.now() - lastRun < 5 * 60 * 1000) return;
+            window.__ticketPruneLock = true;
+            try {
+                const snap = await db.ref('payments').orderByChild('status').equalTo('APPROVED').limitToLast(300).once('value');
+                const rows = Object.entries(snap.val() || {}).filter(([, payment]) => {
+                    const type = (payment?.type || '').toString().toUpperCase();
+                    if (type === 'DEPOSIT' || type === 'UPGRADE') return false;
+                    return !window.isVendor || (payment.ownerId || 'SUPER_ADMIN') === window.currentUserData?.uid;
+                });
+                const affectedEvents = new Set();
+                for (let i = 0; i < rows.length; i += 6) {
+                    await Promise.all(rows.slice(i, i + 6).map(async ([paymentKey, payment]) => {
+                        const expected = window.getExpectedTicketQuantity(payment);
+                        const ticketSnap = await db.ref('tickets').orderByChild('paymentId').equalTo(paymentKey).once('value');
+                        const entries = Object.entries(ticketSnap.val() || {}).map(([ticketKey, ticket]) => ({ ticketKey, ticket })).filter(entry => !window.isTicketLifecycleArtifact(entry.ticket));
+                        const canonical = window.getCanonicalPaymentTicketEntries(entries, expected);
+                        const keep = new Set(canonical.map(entry => entry.ticketKey));
+                        const extras = entries.filter(entry => !keep.has(entry.ticketKey));
+                        if (extras.length) {
+                            const updates = {};
+                            extras.forEach(entry => { updates[`tickets/${entry.ticketKey}`] = null; });
+                            updates[`payments/${paymentKey}/ticketIssuedQty`] = canonical.length;
+                            updates[`payments/${paymentKey}/ticketCodes`] = canonical.map(entry => entry.ticketKey).join(',');
+                            updates[`payments/${paymentKey}/issuanceVersion`] = 'v29';
+                            await db.ref().update(updates);
+                            if (payment.eventId) affectedEvents.add(payment.eventId);
+                        }
+                    }));
+                }
+                for (const eventId of affectedEvents) await window.reconcileEventTicketCounts?.(eventId);
+                sessionStorage.setItem('tiketkaka_ticket_prune_v29', String(Date.now()));
+            } catch (error) {
+                console.warn('bounded ticket prune v29', error);
+            } finally {
+                window.__ticketPruneLock = false;
             }
         };

@@ -1201,12 +1201,24 @@
                 
                 <div id="tab-wa" class="admin-tab">
                     <div class="glass-card rounded-2xl p-6">
-                        <h2 class="text-2xl font-bold mb-1">WhatsApp CS / Admin</h2>
-                        <p class="text-xs text-gray-400 mb-4">Nomor ini akan tampil saat pembeli event Anda menekan tombol 'Kirim Bukti Pembayaran'.</p>
-                        <form onsubmit="handleSaveWA(event); return false;" class="mb-6 flex flex-wrap gap-3"><input type="text" id="wa-name" required class="flex-1 min-w-[200px] bg-darker border border-gray-600 rounded p-2 text-white text-sm" placeholder="Nama CS"><input type="number" id="wa-num" required class="flex-1 min-w-[200px] bg-darker border border-gray-600 rounded p-2 text-white text-sm" placeholder="628..."><button type="submit" class="glow-button px-6 py-2 rounded font-bold text-sm cursor-pointer">Tambah</button></form><div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="admin-wa-grid"></div>
+                        <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+                            <div>
+                                <h2 class="text-2xl font-bold mb-1">WhatsApp CS / Admin</h2>
+                                <p class="text-xs text-gray-400">Nomor dipilih bergantian saat pembeli mengirim bukti pembayaran. Maksimal 20 nomor untuk setiap pemilik event.</p>
+                            </div>
+                            <span id="wa-count" class="inline-flex items-center rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs font-black text-emerald-300">0 / 20 nomor</span>
+                        </div>
+                        <form onsubmit="handleSaveWA(event); return false;" class="mb-6 flex flex-wrap gap-3">
+                            <input type="text" id="wa-name" required maxlength="60" class="flex-1 min-w-[200px] bg-darker border border-gray-600 rounded p-2 text-white text-sm" placeholder="Nama CS">
+                            <input type="tel" inputmode="numeric" id="wa-num" required maxlength="16" class="flex-1 min-w-[200px] bg-darker border border-gray-600 rounded p-2 text-white text-sm" placeholder="628xxxxxxxxxx">
+                            <button id="wa-submit" type="submit" class="glow-button px-6 py-2 rounded font-bold text-sm cursor-pointer">Tambah</button>
+                        </form>
+                        <div class="mb-4 rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-3 text-xs text-cyan-100">
+                            Gunakan format internasional tanpa tanda <b>+</b>, spasi, atau tanda hubung. Contoh: <b>6281234567890</b>.
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="admin-wa-grid"></div>
                     </div>
                 </div>
-
                 <div id="tab-pengaturan" class="admin-tab">
                     <div class="glass-card rounded-2xl p-6">
                         <h2 class="text-2xl font-bold mb-6">Pengaturan Akun & Web</h2>

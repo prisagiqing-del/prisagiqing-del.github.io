@@ -27,14 +27,9 @@
             if (!tbody) return;
             tbody.innerHTML = '<tr><td colspan="6" class="text-center py-6 text-gray-500">Memuat pembayaran...</td></tr>';
 
-            const [paymentsSnap, usersSnap, eventsSnap] = await Promise.all([
-                db.ref('payments').once('value'),
-                db.ref('users').once('value'),
-                db.ref('events').once('value')
-            ]);
-            const payments = paymentsSnap.val() || {};
-            const users = usersSnap.val() || {};
-            const events = eventsSnap.val() || {};
+            const payments = await window.loadAdminPaymentWindow({ force: false });
+            const users = window.usersMapCache || {};
+            const events = window.eventDataMap || {};
             const items = [];
 
             Object.entries(payments).forEach(([key, p]) => {
@@ -117,14 +112,9 @@
             const tbody = document.getElementById('admin-deposit-table');
             if (!tbody) return;
             tbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-gray-500">Memuat data deposit...</td></tr>';
-            const [paymentsSnap, usersSnap, eventsSnap] = await Promise.all([
-                db.ref('payments').once('value'),
-                db.ref('users').once('value'),
-                db.ref('events').once('value')
-            ]);
-            const payments = paymentsSnap.val() || {};
-            const users = usersSnap.val() || {};
-            const events = eventsSnap.val() || {};
+            const payments = await window.loadAdminPaymentWindow({ force: false });
+            const users = window.usersMapCache || {};
+            const events = window.eventDataMap || {};
             const groupRows = Object.values(window.buildDepositGroups(payments, { includeConverted: true })).filter(group => {
                 const representative = group.entries[0]?.data || {};
                 const ownership = window.getPaymentOwnershipInfo?.(representative) || {};
