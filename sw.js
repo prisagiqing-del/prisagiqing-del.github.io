@@ -7,7 +7,7 @@
  */
 
 const CACHE_PREFIXES = ['btix-', 'tiketkaka-'];
-const CACHE_NAME = 'tiketkaka-v24-splash-ready';
+const CACHE_NAME = 'tiketkaka-v25-transfer-upgrade-ui-stability';
 
 const APP_SHELL = [
   './',

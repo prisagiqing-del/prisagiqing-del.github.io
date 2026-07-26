@@ -724,3 +724,103 @@
             .tk-event-action span { display:none; }
             .tk-event-action { width:2.35rem; height:2.35rem; justify-content:center; padding:0; }
         }
+        /* v25: keep the viewport stable while transfer/upgrade updates Firebase in stages. */
+        html {
+            scrollbar-gutter: stable;
+            overflow-x: hidden;
+        }
+        body {
+            overflow-x: hidden;
+        }
+        body.swal2-shown,
+        body.swal2-height-auto {
+            padding-right: 0 !important;
+        }
+        #user-tickets-container,
+        #user-pending-container,
+        #user-history-container {
+            overflow-anchor: none;
+        }
+        #user-tickets-container {
+            min-height: 18rem;
+        }
+        html.tk-ui-mutation,
+        html.tk-ui-mutation body {
+            overscroll-behavior: none;
+        }
+        html.tk-ui-mutation .page,
+        html.tk-ui-mutation .admin-tab,
+        html.tk-ui-mutation #user-tickets-container,
+        html.tk-ui-mutation #user-pending-container,
+        html.tk-ui-mutation #user-history-container,
+        html.tk-ui-mutation .tk-ticket-card,
+        html.tk-ui-mutation .glass-card {
+            animation: none !important;
+            transition: none !important;
+        }
+        #tk-mutation-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 99990;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1.25rem;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 50% 42%, rgba(34, 211, 238, .18), transparent 28%),
+                linear-gradient(145deg, rgba(7, 18, 43, .94), rgba(23, 11, 53, .96));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: opacity .18s ease, visibility .18s ease;
+        }
+        #tk-mutation-overlay.show {
+            display: flex;
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+        #tk-mutation-overlay.show.is-hiding {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        .tk-mutation-panel {
+            width: min(88vw, 25rem);
+            min-height: 10.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            padding: 1.5rem;
+            border-radius: 1.5rem;
+            border: 1px solid rgba(255,255,255,.18);
+            background: linear-gradient(150deg, rgba(42, 23, 100, .88), rgba(11, 49, 88, .9));
+            box-shadow: 0 28px 90px rgba(0,0,0,.52);
+            text-align: center;
+        }
+        .tk-mutation-panel img {
+            display: block;
+            width: min(58vw, 13rem);
+            height: auto;
+            object-fit: contain;
+            filter: drop-shadow(0 12px 28px rgba(0,0,0,.36));
+        }
+        .tk-mutation-panel p {
+            margin: 0;
+            color: #e6faff;
+            font-size: .92rem;
+            font-weight: 800;
+            letter-spacing: .01em;
+        }
+        @media (max-width: 640px) {
+            #user-tickets-container { min-height: 15rem; }
+            .tk-mutation-panel { min-height: 9.5rem; border-radius: 1.25rem; }
+            .tk-mutation-panel img { width: min(62vw, 11.5rem); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #tk-mutation-overlay { transition: none !important; }
+        }
