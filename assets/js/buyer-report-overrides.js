@@ -14,9 +14,9 @@
         }
         
         const [ticketsSnap, paymentsSnap, usersSnap, eventsSnap] = await Promise.all([
-            db.ref('tickets').once('value'),
-            db.ref('payments').once('value'),
-            db.ref('users').once('value'),
+            window.readScopedTicketsSnapshot(),
+            window.readScopedPaymentsSnapshot(),
+            window.readScopedUsersSnapshot(),
             db.ref('events').once('value')
         ]);
         

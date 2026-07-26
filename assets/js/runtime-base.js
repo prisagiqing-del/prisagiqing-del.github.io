@@ -61,10 +61,10 @@
             if (cached) return cached;
             if (!window.db) return null;
             try {
-                const snap = await window.db.ref('tickets').orderByChild('upgradedFrom/originalCode').equalTo(originalCode).limitToFirst(1).once('value');
-                const data = snap.val() || {};
-                const replacementCode = Object.keys(data)[0];
-                const ticket = replacementCode ? data[replacementCode] : null;
+                const data = await window.readScopedTicketsData?.(1500) || {};
+                const replacementEntry = Object.entries(data).find(([, row]) => row?.upgradedFrom?.originalCode === originalCode);
+                const replacementCode = replacementEntry?.[0] || '';
+                const ticket = replacementEntry?.[1] || null;
                 if (!ticket) return null;
                 return {
                     replacementCode,
@@ -515,9 +515,15 @@
             if (!db || window.__ticketPruneLock || (!window.isSuperAdmin && !window.isVendor)) return;
             window.__ticketPruneLock = true;
             try {
+                const paymentQuery = window.isVendor
+                    ? db.ref('payments').orderByChild('ownerId').equalTo(window.currentUserData?.uid || '')
+                    : db.ref('payments');
+                const ticketQuery = window.isVendor
+                    ? db.ref('tickets').orderByChild('ownerId').equalTo(window.currentUserData?.uid || '')
+                    : db.ref('tickets');
                 const [paymentsSnap, ticketsSnap] = await Promise.all([
-                    db.ref('payments').once('value'),
-                    db.ref('tickets').once('value')
+                    paymentQuery.once('value'),
+                    ticketQuery.once('value')
                 ]);
                 const payments = paymentsSnap.val() || {};
                 const tickets = ticketsSnap.val() || {};
@@ -815,6 +821,7 @@
                     updates[`events/${eventId}/tiket/${key}`] = summary[key];
                 });
                 await db.ref().update(updates);
+                await window.syncEventSeatStatusV30?.(eventId, tickets);
             } catch (e) {
                 console.error('[reconcileEventTicketCounts]', e);
             }
@@ -4251,7 +4258,12 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const missing = ids.filter(uid => !window.usersMapCache?.[uid] && !mergeParts(userParts)[uid]);
                 for (let i = 0; i < missing.length; i += 12) {
                     const batch = await Promise.all(missing.slice(i, i + 12).map(async uid => {
-                        try { return [uid, (await db.ref(`users/${uid}`).once('value')).val()]; } catch (e) { return [uid, null]; }
+                        try {
+                            const ref = window.isVendor
+                                ? db.ref(`vendorCustomers/${window.currentUserData?.uid}/${uid}`)
+                                : db.ref(`users/${uid}`);
+                            return [uid, (await ref.once('value')).val()];
+                        } catch (e) { return [uid, null]; }
                     }));
                     const patch = {};
                     batch.forEach(([uid, value]) => { if (value) patch[uid] = value; });
@@ -4279,12 +4291,26 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 attach(db.ref('payments').orderByChild('createdAt').limitToLast(window.ADMIN_RECENT_QUERY_LIMIT || 1500), snap => { paymentParts.recent = snap.val() || {}; renderPayments(); });
             }
 
-            const recentUsersQuery = db.ref('users').orderByChild('createdAt').limitToLast(window.ADMIN_USER_QUERY_LIMIT || 1500);
-            attach(recentUsersQuery, snap => { userParts.recent = snap.val() || {}; renderUsers(); });
             if (window.isSuperAdmin) {
+                const recentUsersQuery = db.ref('users').orderByChild('createdAt').limitToLast(window.ADMIN_USER_QUERY_LIMIT || 1500);
+                attach(recentUsersQuery, snap => { userParts.recent = snap.val() || {}; renderUsers(); });
                 attach(db.ref('users').orderByChild('role').equalTo('Vendor'), snap => { userParts.vendors = snap.val() || {}; renderUsers(); });
                 attach(db.ref('users').orderByChild('role').equalTo('Scanner Ekonomi'), snap => { userParts.scannerEco = snap.val() || {}; renderUsers(); });
                 attach(db.ref('users').orderByChild('role').equalTo('Scanner VIP'), snap => { userParts.scannerVip = snap.val() || {}; renderUsers(); });
+            } else if (window.isVendor && window.currentUserData?.uid) {
+                const vendorId = window.currentUserData.uid;
+                attach(db.ref('users').orderByChild('ownerId').equalTo(vendorId).limitToLast(window.ADMIN_USER_QUERY_LIMIT || 1500), snap => {
+                    userParts.managed = snap.val() || {};
+                    renderUsers();
+                });
+                attach(db.ref(`vendorCustomers/${vendorId}`).limitToLast(window.ADMIN_USER_QUERY_LIMIT || 1500), snap => {
+                    userParts.customers = snap.val() || {};
+                    renderUsers();
+                });
+                attach(db.ref(`users/${vendorId}`), snap => {
+                    userParts.self = snap.exists() ? { [vendorId]: snap.val() } : {};
+                    renderUsers();
+                });
             } else if (window.currentUserData?.uid) {
                 attach(db.ref(`users/${window.currentUserData.uid}`), snap => {
                     userParts.self = snap.exists() ? { [window.currentUserData.uid]: snap.val() } : {};
@@ -5255,25 +5281,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const totalSeats = parseInt(selectedTribunData?.seats || 0, 10) || 0;
             const bookedSeats = [];
 
-            const ticketsSnap = await db.ref('tickets').orderByChild('eventId').equalTo(eventId).once('value');
-            const tickets = ticketsSnap.val() || {};
-            const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
-            Object.entries(tickets).forEach(([ticketCode, t]) => {
-                if (!t || t.selectedTribun !== selectedTribun || !t.selectedSeat) return;
-                if (t.status === 'TRANSFERRED' || window.isTicketReplacedByUpgrade(t, ticketCode, upgradeReplacementMap)) return;
-                const seatValues = ('' + t.selectedSeat).split(/\s*,\s*/).map(s => parseInt(s, 10)).filter(n => Number.isFinite(n));
-                seatValues.forEach(n => bookedSeats.push(n));
-            });
-
-            const paymentsSnap = await db.ref('payments').orderByChild('eventId').equalTo(eventId).once('value');
-            const payments = paymentsSnap.val() || {};
-            Object.values(payments).forEach(p => {
-                if (!p || p.eventId !== eventId || p.selectedTribun !== selectedTribun || !p.selectedSeat || p.status === 'REJECTED') return;
-                if (p.seatReleasedByUpgrade) return;
-                if (p.depositConverted) return;
-                if (p.type === 'UPGRADE' && p.status !== 'PENDING') return;
-                const seatValues = ('' + p.selectedSeat).split(/\s*,\s*/).map(s => parseInt(s, 10)).filter(n => Number.isFinite(n));
-                seatValues.forEach(n => bookedSeats.push(n));
+            // Public seat inventory contains no buyer identity or payment details.
+            const soldSeatSnap = await db.ref(`eventSeatStatus/${window.safeFirebaseKeyPart(eventId)}/${window.safeFirebaseKeyPart(selectedTribun)}`).once('value');
+            Object.values(soldSeatSnap.val() || {}).forEach(row => {
+                const seatNumber = parseInt(row?.seat, 10);
+                if (Number.isFinite(seatNumber) && row?.status === 'SOLD') bookedSeats.push(seatNumber);
             });
             const reservedSeats = await window.getActiveSeatReservations?.(eventId, selectedTribun) || [];
             reservedSeats.map(value => parseInt(value, 10)).filter(Number.isFinite).forEach(n => bookedSeats.push(n));
@@ -5458,10 +5470,16 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         });
                         payloadSet.seatReservationExpiresAt = Date.now() + window.SEAT_RESERVATION_TTL_MS;
                     }
+                    await window.syncVendorCustomerRecord?.(eventOwnerId, uData).catch(() => false);
                     await newPayRef.set(payloadSet);
                 } catch (writeError) {
                     if (seatReservation?.acquired?.length) {
-                        await Promise.all(seatReservation.acquired.map(item => db.ref(item.path).remove().catch(() => null)));
+                        const cleanup = {};
+                        seatReservation.acquired.forEach(item => {
+                            cleanup[item.path] = null;
+                            if (item.claimPath) cleanup[item.claimPath] = null;
+                        });
+                        await db.ref().update(cleanup).catch(() => null);
                     }
                     throw writeError;
                 }
@@ -5947,6 +5965,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 };
                 if (hasTriBun) { payloadSet.selectedTribun = selectedTribun; payloadSet.selectedSeat = selectedSeat; }
                 if (Object.keys(window.currentCustomFormAnswers || {}).length > 0) { payloadSet.customFormAnswers = window.currentCustomFormAnswers; }
+                await window.syncVendorCustomerRecord?.(ownerId, uData).catch(() => false);
                 await newPayRef.set(payloadSet);
 
                 const depositPayment = window.getPaymentInfoForOwner(ownerId);
@@ -6147,12 +6166,18 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         window.tryConvertApprovedDepositPayment = tryConvertApprovedDepositPayment;
 
         window.repairMissingTicketsForApprovedPayments = async function() {
-            if (!db || window.__repairMissingTicketsRunning || window.__ticketCreationLock) return;
+            if (!db || (!window.isSuperAdmin && !window.isVendor) || window.__repairMissingTicketsRunning || window.__ticketCreationLock) return;
             window.__repairMissingTicketsRunning = true;
             try {
+                const paymentQuery = window.isVendor
+                    ? db.ref('payments').orderByChild('ownerId').equalTo(window.currentUserData?.uid || '')
+                    : db.ref('payments');
+                const ticketQuery = window.isVendor
+                    ? db.ref('tickets').orderByChild('ownerId').equalTo(window.currentUserData?.uid || '')
+                    : db.ref('tickets');
                 const [paymentsSnap, ticketsSnap] = await Promise.all([
-                    db.ref('payments').once('value'),
-                    db.ref('tickets').once('value')
+                    paymentQuery.once('value'),
+                    ticketQuery.once('value')
                 ]);
                 const payments = paymentsSnap.val() || {};
                 const tickets = ticketsSnap.val() || {};
@@ -7129,6 +7154,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     payload.selectedSeat = selectedSeatForUpgrade;
                 }
                 if (ticket.customFormAnswers) { payload.customFormAnswers = ticket.customFormAnswers; }
+                await window.syncVendorCustomerRecord?.(payload.ownerId, window.currentUserData || {}).catch(() => false);
                 await newPayRef.set(payload);
                 // Build payment instruction HTML using vendor override when available
                 const upgradePayment = window.getPaymentInfoForOwner(ownerId);
@@ -7254,15 +7280,14 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     return Swal.fire({icon:'warning', title:'Penerima Tidak Valid', text:'Tiket tidak dapat ditransfer ke akun Anda sendiri.', background:'#1e293b', color:'#fff'});
                 }
 
-                // Probe khusus untuk memastikan Rules v19 benar-benar sudah aktif.
-                // Rules lama akan menolak jalur ini, sehingga pesan error tidak lagi menebak-nebak.
-                transferStage = 'memeriksa Database Rules v19';
+                // Probe kompatibilitas transfer. Rules v30 tetap mempertahankan protokol transfer v19.
+                transferStage = 'memeriksa Database Rules transfer';
                 const rulesProbeRef = db.ref(`transferRuleProbes/${currentUser.uid}`);
                 try {
                     await rulesProbeRef.set({version:'v19', checkedAt: firebase.database.ServerValue.TIMESTAMP});
                     await rulesProbeRef.remove();
                 } catch (rulesProbeError) {
-                    const probeError = new Error('Database Rules v19 belum aktif. Pasang file Rules v19 di Realtime Database lalu klik Publish.');
+                    const probeError = new Error('Database Rules terbaru belum aktif. Pasang file Database Rules v30 di Realtime Database lalu klik Publish.');
                     probeError.code = 'RULES_V19_NOT_ACTIVE';
                     throw probeError;
                 }
@@ -7291,10 +7316,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
 
                 transferStage = 'mencari akun penerima';
-                const usersSnap = await db.ref('users').orderByChild('email').equalTo(recipientEmail).once('value');
-                const usersData = usersSnap.val() || {};
-                const recipientUid = Object.keys(usersData)[0] || null;
-                const recipientData = recipientUid ? usersData[recipientUid] : null;
+                const recipientData = await window.findDirectoryUserByEmail(recipientEmail);
+                const recipientUid = recipientData?.uid || null;
                 if (!recipientUid || !recipientData) {
                     return Swal.fire({icon:'error', title:'Email Tidak Terdaftar', text:'Penerima harus sudah memiliki akun Tiket Kaka.', background:'#1e293b', color:'#fff'});
                 }
@@ -8599,7 +8622,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                                         }
                                     } 
                                 }
-                                const paySnap = await db.ref('payments').once('value'); const payData = paySnap.val() || {};
+                                const paySnap = await window.readScopedPaymentsSnapshot(); const payData = paySnap.val() || {};
                                 for(let p in payData) { 
                                     let theOwner = payData[p].ownerId || 'SUPER_ADMIN';
                                     if (window.isVendor && theOwner !== window.currentUserData.uid) continue;
@@ -8610,7 +8633,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                                         await db.ref(`payments/${p}`).remove();
                                     }
                                 }
-                                const tixSnap = await db.ref('tickets').once('value'); const tixData = tixSnap.val() || {};
+                                const tixSnap = await window.readScopedTicketsSnapshot(); const tixData = tixSnap.val() || {};
                                 for(let t in tixData) { 
                                     let theOwner = tixData[t].ownerId || 'SUPER_ADMIN';
                                     if (window.isVendor && theOwner !== window.currentUserData.uid) continue;
@@ -8917,9 +8940,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             
             // Query all needed data directly dari Firebase
             const [ticketsSnap, paymentsSnap, usersSnap, eventsSnap] = await Promise.all([
-                window.db.ref('tickets').once('value'),
-                window.db.ref('payments').once('value'),
-                window.db.ref('users').once('value'),
+                window.readScopedTicketsSnapshot(),
+                window.readScopedPaymentsSnapshot(),
+                window.readScopedUsersSnapshot(),
                 window.db.ref('events').once('value')
             ]);
             
@@ -9098,9 +9121,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
             try {
                 const selectedEventId = document.getElementById('raffle-event-select')?.value || '';
-                const ticketsSnap = await db.ref('tickets').once('value');
+                const ticketsSnap = await window.readScopedTicketsSnapshot();
                 const eventsSnap = await db.ref('events').once('value');
-                const usersSnap = await db.ref('users').once('value');
+                const usersSnap = await window.readScopedUsersSnapshot();
 
                 const tickets = ticketsSnap.val() || {};
                 const events = eventsSnap.val() || {};
@@ -9659,8 +9682,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 
                 // Get all data dari Firebase
                 const [paymentsSnap, usersSnap, eventsSnap] = await Promise.all([
-                    window.db.ref('payments').once('value'),
-                    window.db.ref('users').once('value'),
+                    window.readScopedPaymentsSnapshot(),
+                    window.readScopedUsersSnapshot(),
                     window.db.ref('events').once('value')
                 ]);
                 
@@ -9731,8 +9754,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 
                 // Get all data dari Firebase
                 const [ticketsSnap, usersSnap, eventsSnap] = await Promise.all([
-                    window.db.ref('tickets').once('value'),
-                    window.db.ref('users').once('value'),
+                    window.readScopedTicketsSnapshot(),
+                    window.readScopedUsersSnapshot(),
                     window.db.ref('events').once('value')
                 ]);
                 
@@ -9817,9 +9840,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 
                 // Get data dari Firebase
                 const [paymentsSnap, usersSnap, ticketsSnap] = await Promise.all([
-                    window.db.ref('payments').once('value'),
-                    window.db.ref('users').once('value'),
-                    window.db.ref('tickets').once('value')
+                    window.readScopedPaymentsSnapshot(),
+                    window.readScopedUsersSnapshot(),
+                    window.readScopedTicketsSnapshot()
                 ]);
                 
                 const payments = paymentsSnap.val() || {};
@@ -10596,37 +10619,65 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             return `seatReservations/${window.safeFirebaseKeyPart(eventId)}/${window.safeFirebaseKeyPart(tribun)}/${window.safeFirebaseKeyPart(seat)}`;
         };
 
+        window.getSeatReservationClaimId = function(paymentId, tribun, seat) {
+            return window.safeFirebaseKeyPart(`${paymentId}_${tribun}_${seat}`);
+        };
+
         window.acquireSeatReservations = async function({ eventId, tribun, seats, paymentId, uid }) {
             const cleanSeats = [...new Set((seats || []).map(value => String(value).trim()).filter(Boolean))];
             if (!eventId || !tribun || !paymentId || !uid || !cleanSeats.length) return { ok: true, acquired: [] };
             const acquired = [];
             const now = Date.now();
             const expiresAt = now + window.SEAT_RESERVATION_TTL_MS;
+            let ownerId = window.eventDataMap?.[eventId]?.ownerId || '';
+            if (!ownerId) {
+                try { ownerId = (await db.ref(`events/${eventId}/ownerId`).once('value')).val() || 'SUPER_ADMIN'; }
+                catch (e) { ownerId = 'SUPER_ADMIN'; }
+            }
             try {
                 for (const seat of cleanSeats) {
+                    const claimId = window.getSeatReservationClaimId(paymentId, tribun, seat);
+                    const claimPath = `seatReservationClaims/${uid}/${claimId}`;
+                    await db.ref(claimPath).set({
+                        eventId,
+                        tribun,
+                        seat,
+                        paymentId,
+                        claimId,
+                        createdAt: now,
+                        expiresAt
+                    });
                     const path = window.getSeatReservationPath(eventId, tribun, seat);
                     const ref = db.ref(path);
                     const result = await ref.transaction(current => {
                         const expired = !current || Number(current.expiresAt || 0) <= now;
-                        const mine = current && current.uid === uid && current.paymentId === paymentId;
+                        const mine = current && current.claimId === claimId;
                         if (!expired && !mine) return;
                         return {
                             eventId,
                             tribun,
                             seat,
-                            uid,
-                            paymentId,
+                            claimId,
+                            ownerId,
                             status: 'PENDING',
                             createdAt: current?.createdAt || now,
                             expiresAt
                         };
                     }, undefined, false);
-                    if (!result.committed) throw new Error(`Kursi ${seat} baru saja dipilih pembeli lain. Silakan pilih kursi lain.`);
-                    acquired.push({ path, seat });
+                    if (!result.committed) {
+                        await db.ref(claimPath).remove().catch(() => null);
+                        throw new Error(`Kursi ${seat} baru saja dipilih pembeli lain. Silakan pilih kursi lain.`);
+                    }
+                    acquired.push({ path, claimPath, seat, claimId });
                 }
                 return { ok: true, acquired };
             } catch (error) {
-                await Promise.all(acquired.map(item => db.ref(item.path).remove().catch(() => null)));
+                const rollback = {};
+                acquired.forEach(item => {
+                    rollback[item.path] = null;
+                    rollback[item.claimPath] = null;
+                });
+                if (Object.keys(rollback).length) await db.ref().update(rollback).catch(() => null);
                 throw error;
             }
         };
@@ -10637,10 +10688,15 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if (!payment) payment = (await db.ref(`payments/${paymentId}`).once('value')).val() || {};
             const eventId = payment.eventId || '';
             const tribun = payment.selectedTribun || '';
+            const uid = payment.uid || auth.currentUser?.uid || '';
             const seats = String(payment.selectedSeat || '').split(/\s*,\s*/).filter(Boolean);
             if (!eventId || !tribun || !seats.length) return;
             const updates = {};
-            seats.forEach(seat => { updates[window.getSeatReservationPath(eventId, tribun, seat)] = null; });
+            seats.forEach(seat => {
+                const claimId = window.getSeatReservationClaimId(paymentId, tribun, seat);
+                updates[window.getSeatReservationPath(eventId, tribun, seat)] = null;
+                if (uid) updates[`seatReservationClaims/${uid}/${claimId}`] = null;
+            });
             if (Object.keys(updates).length) await db.ref().update(updates);
         };
 
@@ -10718,8 +10774,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if (Date.now() - lastRun < 10 * 60 * 1000) return;
             window.__analyticsBackfillRunning = true;
             try {
-                const snap = await db.ref('payments').orderByChild('status').equalTo('APPROVED').limitToLast(Math.max(50, Math.min(1000, limit))).once('value');
-                const rows = Object.entries(snap.val() || {}).filter(([, p]) => !window.isVendor || (p.ownerId || 'SUPER_ADMIN') === window.currentUserData?.uid);
+                const paymentData = window.isVendor
+                    ? await window.readScopedPaymentsData(Math.max(50, Math.min(1000, limit)))
+                    : (await db.ref('payments').orderByChild('status').equalTo('APPROVED').limitToLast(Math.max(50, Math.min(1000, limit))).once('value')).val() || {};
+                const rows = Object.entries(paymentData).filter(([, p]) => (p.status || '').toString().toUpperCase() === 'APPROVED' && (!window.isVendor || (p.ownerId || 'SUPER_ADMIN') === window.currentUserData?.uid));
                 for (let i = 0; i < rows.length; i += 8) {
                     await Promise.all(rows.slice(i, i + 8).map(([id, payment]) => window.recordPaymentAnalyticsOnce(id, payment).catch(err => console.warn('analytics backfill', id, err))));
                 }
@@ -10886,8 +10944,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if (Date.now() - lastRun < 60 * 1000) return;
             window.__repairMissingTicketsRunning = true;
             try {
-                const snap = await db.ref('payments').orderByChild('status').equalTo('APPROVED').limitToLast(300).once('value');
-                const rows = Object.entries(snap.val() || {}).filter(([, payment]) => {
+                const paymentData = window.isVendor
+                    ? await window.readScopedPaymentsData(300)
+                    : (await db.ref('payments').orderByChild('status').equalTo('APPROVED').limitToLast(300).once('value')).val() || {};
+                const rows = Object.entries(paymentData).filter(([, payment]) => {
+                    if ((payment?.status || '').toString().toUpperCase() !== 'APPROVED') return false;
                     const type = (payment?.type || '').toString().toUpperCase();
                     if (type === 'DEPOSIT' || type === 'UPGRADE') return false;
                     return !window.isVendor || (payment.ownerId || 'SUPER_ADMIN') === window.currentUserData?.uid;
@@ -10920,8 +10981,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if (Date.now() - lastRun < 5 * 60 * 1000) return;
             window.__ticketPruneLock = true;
             try {
-                const snap = await db.ref('payments').orderByChild('status').equalTo('APPROVED').limitToLast(300).once('value');
-                const rows = Object.entries(snap.val() || {}).filter(([, payment]) => {
+                const paymentData = window.isVendor
+                    ? await window.readScopedPaymentsData(300)
+                    : (await db.ref('payments').orderByChild('status').equalTo('APPROVED').limitToLast(300).once('value')).val() || {};
+                const rows = Object.entries(paymentData).filter(([, payment]) => {
+                    if ((payment?.status || '').toString().toUpperCase() !== 'APPROVED') return false;
                     const type = (payment?.type || '').toString().toUpperCase();
                     if (type === 'DEPOSIT' || type === 'UPGRADE') return false;
                     return !window.isVendor || (payment.ownerId || 'SUPER_ADMIN') === window.currentUserData?.uid;
@@ -10954,3 +11018,247 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 window.__ticketPruneLock = false;
             }
         };
+        // Vendor data isolation and privacy helpers (v30)
+        (function () {
+            const V30_QUERY_LIMIT = 5000;
+
+            function currentUid() {
+                return window.currentUserData?.uid || window.auth?.currentUser?.uid || '';
+            }
+
+            function currentRole() {
+                return window.currentUserData?.role || '';
+            }
+
+            function plain(snapshot) {
+                return snapshot?.val?.() || {};
+            }
+
+            window.readScopedPaymentsData = async function(limit = V30_QUERY_LIMIT) {
+                if (!window.db) return {};
+                const uid = currentUid();
+                if (window.isSuperAdmin) {
+                    return plain(await db.ref('payments').orderByChild('createdAt').limitToLast(limit).once('value'));
+                }
+                if (window.isVendor && uid) {
+                    return plain(await db.ref('payments').orderByChild('ownerId').equalTo(uid).limitToLast(limit).once('value'));
+                }
+                if (uid) {
+                    return plain(await db.ref('payments').orderByChild('uid').equalTo(uid).limitToLast(Math.min(limit, 500)).once('value'));
+                }
+                return {};
+            };
+
+            window.readScopedTicketsData = async function(limit = V30_QUERY_LIMIT) {
+                if (!window.db) return {};
+                const uid = currentUid();
+                const role = currentRole();
+                if (window.isSuperAdmin) {
+                    return plain(await db.ref('tickets').orderByChild('createdAt').limitToLast(limit).once('value'));
+                }
+                if (window.isVendor && uid) {
+                    return plain(await db.ref('tickets').orderByChild('ownerId').equalTo(uid).limitToLast(limit).once('value'));
+                }
+                if ((role === 'Scanner Ekonomi' || role === 'Scanner VIP') && window.currentUserData?.ownerId) {
+                    return plain(await db.ref('tickets').orderByChild('ownerId').equalTo(window.currentUserData.ownerId).limitToLast(Math.min(limit, 10000)).once('value'));
+                }
+                if (uid) {
+                    return plain(await db.ref('tickets').orderByChild('uid').equalTo(uid).limitToLast(Math.min(limit, 1000)).once('value'));
+                }
+                return {};
+            };
+
+            window.readScopedCustomerData = async function(limit = V30_QUERY_LIMIT) {
+                if (!window.db) return {};
+                const uid = currentUid();
+                if (window.isSuperAdmin) {
+                    return plain(await db.ref('users').orderByChild('createdAt').limitToLast(limit).once('value'));
+                }
+                if (window.isVendor && uid) {
+                    return plain(await db.ref(`vendorCustomers/${uid}`).limitToLast(limit).once('value'));
+                }
+                if (uid) {
+                    const snap = await db.ref(`users/${uid}`).once('value');
+                    return snap.exists() ? { [uid]: snap.val() } : {};
+                }
+                return {};
+            };
+
+            window.readScopedManagedUsersData = async function(limit = 1500) {
+                if (!window.db) return {};
+                const uid = currentUid();
+                if (window.isSuperAdmin) {
+                    return plain(await db.ref('users').orderByChild('createdAt').limitToLast(limit).once('value'));
+                }
+                if (window.isVendor && uid) {
+                    return plain(await db.ref('users').orderByChild('ownerId').equalTo(uid).limitToLast(limit).once('value'));
+                }
+                return {};
+            };
+
+            function memorySnapshot(data) {
+                return { val: () => data || {}, exists: () => Boolean(data && Object.keys(data).length) };
+            }
+
+            window.readScopedPaymentsSnapshot = async function(limit) { return memorySnapshot(await window.readScopedPaymentsData(limit)); };
+            window.readScopedTicketsSnapshot = async function(limit) { return memorySnapshot(await window.readScopedTicketsData(limit)); };
+            window.readScopedUsersSnapshot = async function(limit) { return memorySnapshot(await window.readScopedCustomerData(limit)); };
+
+            window.loadScopedAdminData = async function(options = {}) {
+                const limit = Number(options.limit || V30_QUERY_LIMIT);
+                const [tickets, payments, users, eventsSnap] = await Promise.all([
+                    window.readScopedTicketsData(limit),
+                    window.readScopedPaymentsData(limit),
+                    window.readScopedCustomerData(limit),
+                    db.ref('events').once('value')
+                ]);
+                return { tickets, payments, users, events: plain(eventsSnap) };
+            };
+
+            window.syncUserDirectoryRecord = async function(profileOverride) {
+                const user = window.auth?.currentUser;
+                if (!user || !window.db) return false;
+                let profile = profileOverride || window.currentUserData || {};
+                if (!profile.uid) {
+                    try { profile = (await db.ref(`users/${user.uid}`).once('value')).val() || {}; } catch (e) {}
+                }
+                const record = {
+                    uid: user.uid,
+                    email: String(user.email || profile.email || '').trim(),
+                    emailLower: String(user.email || profile.email || '').trim().toLowerCase(),
+                    nama: String(profile.nama || profile.username || 'User').slice(0, 200),
+                    role: String(profile.role || 'User').slice(0, 40),
+                    updatedAt: firebase.database.ServerValue.TIMESTAMP
+                };
+                if (!record.email || !record.emailLower) return false;
+                await db.ref(`userDirectory/${user.uid}`).set(record);
+                return true;
+            };
+
+            window.findDirectoryUserByEmail = async function(email) {
+                const normalized = String(email || '').trim().toLowerCase();
+                if (!normalized || !window.db || !window.auth?.currentUser) return null;
+                const snap = await db.ref('userDirectory').orderByChild('emailLower').equalTo(normalized).limitToFirst(2).once('value');
+                const data = snap.val() || {};
+                const uid = Object.keys(data)[0] || '';
+                return uid ? { uid, ...(data[uid] || {}) } : null;
+            };
+
+            window.syncVendorCustomerRecord = async function(ownerId, profileOverride) {
+                const user = window.auth?.currentUser;
+                if (!user || !window.db || !ownerId || ownerId === 'SUPER_ADMIN') return false;
+                const profile = profileOverride || window.currentUserData || {};
+                const record = {
+                    uid: user.uid,
+                    nama: String(profile.nama || profile.username || 'User').slice(0, 200),
+                    email: String(user.email || profile.email || '').trim().slice(0, 254),
+                    phone: String(profile.phone || '').replace(/[^0-9+]/g, '').slice(0, 30),
+                    updatedAt: firebase.database.ServerValue.TIMESTAMP
+                };
+                await db.ref(`vendorCustomers/${ownerId}/${user.uid}`).set(record);
+                return true;
+            };
+
+            window.syncEventSeatStatusV30 = async function(eventId, ticketData) {
+                if (!eventId || !window.db || (!window.isSuperAdmin && !window.isVendor)) return false;
+                const tickets = ticketData || await window.readScopedTicketsData(10000);
+                const event = window.eventDataMap?.[eventId] || (await db.ref(`events/${eventId}`).once('value')).val() || {};
+                const ownerId = event.ownerId || 'SUPER_ADMIN';
+                if (window.isVendor && ownerId !== currentUid()) return false;
+                const replacementMap = window.getUpgradeReplacementMap?.(tickets) || {};
+                const statusTree = {};
+                Object.entries(tickets || {}).forEach(([ticketCode, ticket]) => {
+                    if (!ticket || ticket.eventId !== eventId || !ticket.selectedTribun || !ticket.selectedSeat) return;
+                    if ((ticket.status || '').toUpperCase() === 'TRANSFERRED') return;
+                    if (window.isTicketReplacedByUpgrade?.(ticket, ticketCode, replacementMap)) return;
+                    const tribunKey = window.safeFirebaseKeyPart(ticket.selectedTribun);
+                    String(ticket.selectedSeat).split(/\s*,\s*/).filter(Boolean).forEach(seat => {
+                        const seatKey = window.safeFirebaseKeyPart(seat);
+                        if (!statusTree[tribunKey]) statusTree[tribunKey] = {};
+                        statusTree[tribunKey][seatKey] = {
+                            seat: String(seat),
+                            status: 'SOLD',
+                            updatedAt: Date.now()
+                        };
+                    });
+                });
+                await db.ref(`eventSeatStatus/${window.safeFirebaseKeyPart(eventId)}`).set(statusTree);
+                return true;
+            };
+
+            window.backfillEventSeatStatusV30 = async function() {
+                if ((!window.isSuperAdmin && !window.isVendor) || !window.db || window.__seatStatusBackfillV30) return;
+                window.__seatStatusBackfillV30 = true;
+                try {
+                    const tickets = await window.readScopedTicketsData(10000);
+                    const eventIds = [...new Set(Object.values(tickets).map(ticket => ticket?.eventId).filter(Boolean))];
+                    for (const eventId of eventIds.slice(0, 300)) {
+                        await window.syncEventSeatStatusV30(eventId, tickets);
+                    }
+                } catch (error) {
+                    console.warn('[v30] seat status backfill gagal:', error);
+                } finally {
+                    window.__seatStatusBackfillV30 = false;
+                }
+            };
+
+            window.backfillPrivacyIndexesV30 = async function() {
+                if (!window.isSuperAdmin || !window.db || window.__privacyBackfillV30Running) return;
+                window.__privacyBackfillV30Running = true;
+                try {
+                    const [usersSnap, paymentsSnap] = await Promise.all([
+                        db.ref('users').orderByChild('createdAt').limitToLast(3000).once('value'),
+                        db.ref('payments').orderByChild('createdAt').limitToLast(3000).once('value')
+                    ]);
+                    const users = usersSnap.val() || {};
+                    const payments = paymentsSnap.val() || {};
+                    const updates = {};
+                    Object.entries(users).forEach(([uid, user]) => {
+                        if (!user?.email) return;
+                        updates[`userDirectory/${uid}`] = {
+                            uid,
+                            email: String(user.email).trim(),
+                            emailLower: String(user.email).trim().toLowerCase(),
+                            nama: String(user.nama || user.username || 'User').slice(0, 200),
+                            role: String(user.role || 'User').slice(0, 40),
+                            updatedAt: firebase.database.ServerValue.TIMESTAMP
+                        };
+                    });
+                    Object.values(payments).forEach(payment => {
+                        const ownerId = payment?.ownerId;
+                        const uid = payment?.uid;
+                        if (!ownerId || ownerId === 'SUPER_ADMIN' || !uid || !users[uid]) return;
+                        const user = users[uid];
+                        updates[`vendorCustomers/${ownerId}/${uid}`] = {
+                            uid,
+                            nama: String(user.nama || payment.userName || user.username || 'User').slice(0, 200),
+                            email: String(user.email || '').trim().slice(0, 254),
+                            phone: String(user.phone || '').replace(/[^0-9+]/g, '').slice(0, 30),
+                            updatedAt: firebase.database.ServerValue.TIMESTAMP
+                        };
+                    });
+                    const entries = Object.entries(updates);
+                    for (let i = 0; i < entries.length; i += 400) {
+                        await db.ref().update(Object.fromEntries(entries.slice(i, i + 400)));
+                    }
+                } catch (error) {
+                    console.warn('[v30] Privacy index backfill gagal:', error);
+                } finally {
+                    window.__privacyBackfillV30Running = false;
+                }
+            };
+
+            // Keep the minimal transfer directory current without exposing full user profiles.
+            try {
+                auth.onAuthStateChanged(user => {
+                    if (!user) return;
+                    const runMaintenance = () => {
+                        window.syncUserDirectoryRecord().catch(err => console.warn('[v30] user directory sync', err));
+                        if (window.isSuperAdmin) window.backfillPrivacyIndexesV30();
+                        if (window.isSuperAdmin || window.isVendor) window.backfillEventSeatStatusV30();
+                    };
+                    setTimeout(runMaintenance, 1400);
+                    setTimeout(runMaintenance, 4200);
+                });
+            } catch (e) {}
+        })();
