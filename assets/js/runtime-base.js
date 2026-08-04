@@ -1,4 +1,4 @@
-        window.TIKETKAKA_RELEASE = 'v42-all-tribuns';
+        window.TIKETKAKA_RELEASE = 'v43-festival-tribun';
 
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67)) || (e.ctrlKey && e.keyCode == 85)) return false; };
@@ -1087,7 +1087,7 @@
                 return;
             }
             try {
-                navigator.serviceWorker.register('/sw.js?v=42-all-tribuns', { updateViaCache: 'none' }).catch(() => {});
+                navigator.serviceWorker.register('/sw.js?v=43-festival-tribun', { updateViaCache: 'none' }).catch(() => {});
             } catch (err) {
                 console.warn('SW registration skipped:', err);
             }
@@ -5370,22 +5370,34 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if (!ev || !Array.isArray(ev.tribuns)) return [];
             const normalizedCat = (category || '').toString().trim().toLowerCase();
             const tribuns = ev.tribuns || [];
+            const normalizeTribunName = value => (value || '').toString().trim().toLowerCase()
+                .normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+            const isFestivalTribun = tribun => {
+                const name = normalizeTribunName(tribun?.name);
+                if (!name.includes('festival')) return false;
+                return !['vip', 'vvip', 'reguler', 'regular', 'ekonomi', 'presale'].some(marker => name.includes(marker));
+            };
+            const isFestival = normalizedCat === 'festival';
             const isVIP = normalizedCat === 'vip' || normalizedCat.includes('vip') && !normalizedCat.includes('vvip');
             const isVVIP = normalizedCat === 'vvip' || normalizedCat.includes('vvip');
-            const isRegular = ['presale', 'reguler', 'ekonomi', 'festival', 'terusan ekonomi'].some(key => normalizedCat === key || normalizedCat.includes(key));
+            const isRegular = ['presale', 'reguler', 'ekonomi', 'terusan ekonomi'].some(key => normalizedCat === key || normalizedCat.includes(key));
+            if (isFestival) return tribuns.filter(isFestivalTribun);
             if (isVVIP) {
-                return tribuns.filter(tribun => (tribun.name || '').toString().toLowerCase().includes('vvip'));
+                return tribuns.filter(tribun => {
+                    const name = normalizeTribunName(tribun?.name);
+                    return name.includes('vvip') && !name.includes('festival');
+                });
             }
             if (isVIP) {
                 return tribuns.filter(tribun => {
-                    const name = (tribun.name || '').toString().toLowerCase();
-                    return name.includes('vip') && !name.includes('vvip');
+                    const name = normalizeTribunName(tribun?.name);
+                    return name.includes('vip') && !name.includes('vvip') && !name.includes('festival');
                 });
             }
             if (isRegular) {
                 return tribuns.filter(tribun => {
-                    const name = (tribun.name || '').toString().toLowerCase();
-                    return !name.includes('vvip') && !name.includes('vip');
+                    const name = normalizeTribunName(tribun?.name);
+                    return !name.includes('vvip') && !name.includes('vip') && !name.includes('festival');
                 });
             }
             return tribuns;
@@ -5424,9 +5436,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if (!tribunSelect) return;
             const allowedTribuns = window.getAllowedTribunsForCategory(ev, category);
             if (!allowedTribuns.length) {
-                tribunSelect.innerHTML = '<option value="">Tribun tidak tersedia untuk kategori ini</option>';
+                tribunSelect.innerHTML = category?.toString().trim().toLowerCase() === 'festival' ? '<option value="">Tribun Festival belum dikonfigurasi</option>' : '<option value="">Tribun tidak tersedia untuk kategori ini</option>';
                 if (seatSelect) seatSelect.innerHTML = '<option value="">Pilih tribun terlebih dahulu</option>';
-                if (tribunInfo) tribunInfo.textContent = 'Tidak ada tribun yang tersedia untuk kategori ini.';
+                if (tribunInfo) tribunInfo.textContent = category?.toString().trim().toLowerCase() === 'festival' ? 'Tambahkan tribun bernama Festival pada konfigurasi tribun event.' : 'Tidak ada tribun yang tersedia untuk kategori ini.';
                 if (seatGroup) seatGroup.classList.add('hidden');
                 return;
             }
@@ -5549,7 +5561,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     if (!allowedTribuns.some(t => t.name === selectedTribun)) {
                         btn.disabled = false;
                         btn.innerHTML = "Checkout Pembayaran";
-                        return Swal.fire({icon:'warning', title:'Tribun Tidak Sesuai', text:'Kategori tiket ini tidak bisa memilih tribun VIP/VVIP.', background:'#1e293b', color:'#fff'});
+                        return Swal.fire({icon:'warning', title:'Tribun Tidak Sesuai', text:'Tribun yang dipilih tidak sesuai dengan kategori tiket ini.', background:'#1e293b', color:'#fff'});
                     }
                 }
                 
@@ -12090,6 +12102,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             setTimeout(startWhenReady, 120);
         });
 
+        window.TICKET_VARIANTS_ENABLED_V43 = false;
         window.TICKET_VARIANT_ZONES_V40 = ['Festival', 'Tribune Utara', 'Tribune Selatan', 'Tribune Timur', 'Tribune Barat'];
         window.TICKET_VARIANT_STAGES_V40 = ['Early Bird', 'Presale 1', 'Presale 2', 'Presale 3', 'General Sale'];
 
@@ -12148,6 +12161,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         };
 
         window.getActiveEventTicketVariants = function(ev, options = {}) {
+            if (window.TICKET_VARIANTS_ENABLED_V43 !== true) return [];
             const includeSoldOut = options.includeSoldOut === true;
             const includeInactive = options.includeInactive === true;
             return window.getEventTicketVariants(ev).filter(item => {
@@ -12165,8 +12179,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         window.categoryUsesTribun = function(ev, category) {
             const hasConfiguredTribuns = Boolean(Array.isArray(ev?.tribuns) && ev.tribuns.length > 0);
             const variant = window.findTicketVariant(ev, category);
-            // v42: every additional category may use every configured tribunal.
-            if (variant) return hasConfiguredTribuns;
+            // v43: legacy variant records remain readable, but new combination sales are disabled.
+            if (variant) return window.TICKET_VARIANTS_ENABLED_V43 === true && hasConfiguredTribuns;
             // Legacy Festival remains optional: it uses tribunals only when the event enables them.
             if ((category || '').toString().trim().toLowerCase() === 'festival') return hasConfiguredTribuns;
             return hasConfiguredTribuns;
@@ -12243,6 +12257,22 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         };
 
         window.collectTicketVariantsFromForm = function(existingVariants = {}) {
+            if (window.TICKET_VARIANTS_ENABLED_V43 !== true) {
+                const legacySold = {};
+                Object.entries(existingVariants || {}).forEach(([key, raw]) => {
+                    const normalized = window.normalizeTicketVariant(raw, key);
+                    if (normalized.sold > 0) {
+                        legacySold[key] = {
+                            ...normalized,
+                            quota: normalized.sold,
+                            active: false,
+                            deposit_enabled: false,
+                            structure_version: 'v40'
+                        };
+                    }
+                });
+                return legacySold;
+            }
             const rows = Array.from(document.querySelectorAll('#ev-ticket-variant-list .ticket-variant-row'));
             const result = {};
             const seen = new Set();
@@ -12325,14 +12355,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
         const getAllowedTribunsForCategoryV39 = window.getAllowedTribunsForCategory;
         window.getAllowedTribunsForCategory = function(ev, category) {
-            const configuredTribuns = Array.isArray(ev?.tribuns)
-                ? ev.tribuns.filter(item => item && (item.name || '').toString().trim())
-                : [];
             const variant = window.findTicketVariant(ev, category);
-            const normalizedCategory = (category || '').toString().trim().toLowerCase();
-            // v42: all configured tribunals stay selectable for every added combination
-            // and for the optional legacy Festival category.
-            if (variant || normalizedCategory === 'festival') return configuredTribuns;
+            if (variant && window.TICKET_VARIANTS_ENABLED_V43 !== true) return [];
             return getAllowedTribunsForCategoryV39(ev, category);
         };
 
@@ -12362,7 +12386,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const evId = document.getElementById('co-evid')?.value || '';
             const category = document.getElementById('co-category')?.value || '';
             const ev = window.eventDataMap?.[evId] || null;
-            if (window.findTicketVariant(ev, category) || category.toString().trim().toLowerCase() === 'festival') return window.updateTicketVariantSeatingUI(ev, category);
+            if (category.toString().trim().toLowerCase() === 'festival') return window.updateTicketVariantSeatingUI(ev, category);
+            if (window.findTicketVariant(ev, category) && window.TICKET_VARIANTS_ENABLED_V43 === true) return window.updateTicketVariantSeatingUI(ev, category);
             return filterTribunOptionsForCategoryV39();
         };
 
