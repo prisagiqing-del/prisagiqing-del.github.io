@@ -81,6 +81,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -1100,7 +1101,7 @@
                         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-6">
                             <div><h2 class="text-2xl font-bold"><i class="fa-solid fa-calendar-days text-amber-500 mr-2"></i> Manajemen Event</h2><p id="admin-event-list-label" class="text-sm text-amber-400 mt-1 hidden">Daftar Semua Event</p><p class="text-xs text-gray-400 mt-1">Setiap Vendor dapat membuat, mengedit, dan menghapus event miliknya sendiri. Super Admin dapat mengelola seluruh event.</p></div>
                             <div class="flex flex-wrap gap-3">
-                                <button type="button" onclick="openModal('add-event-modal'); document.getElementById('form-add-event').reset(); document.getElementById('ev-kategori-custom').classList.add('hidden'); document.getElementById('ev-sport-season-box').classList.add('hidden'); document.getElementById('btn-save-event').innerText = 'Publish Event'; window.editEventKey=null; document.getElementById('ev-fasilitas').classList.add('hidden'); document.getElementById('ev-custom-form-box').classList.add('hidden'); document.getElementById('ev-use-custom-form').checked = false; document.getElementById('ev-use-tribun').checked = false; document.getElementById('ev-enable-raffle').checked = false; document.getElementById('ev-tribun-box').classList.add('hidden'); document.getElementById('ev-tribun-list').innerHTML = ''; window.resetTicketVariantForm?.(); window.applyCurrentVendorBrandToEventForm?.();" class="glow-button text-dark font-bold px-4 py-2 rounded-lg text-sm cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.3)]"><i class="fa-solid fa-plus mr-1"></i> Tambah Event</button>
+                                <button type="button" onclick="openModal('add-event-modal'); document.getElementById('form-add-event').reset(); document.getElementById('ev-kategori-custom').classList.add('hidden'); document.getElementById('ev-sport-season-box').classList.add('hidden'); document.getElementById('btn-save-event').innerText = 'Publish Event'; window.editEventKey=null; document.getElementById('ev-fasilitas').classList.add('hidden'); document.getElementById('ev-custom-form-box').classList.add('hidden'); document.getElementById('ev-use-custom-form').checked = false; document.getElementById('ev-use-tribun').checked = false; document.getElementById('ev-enable-raffle').checked = false; document.getElementById('ev-tribun-box').classList.add('hidden'); document.getElementById('ev-tribun-list').innerHTML = ''; window.resetTicketVariantForm?.(); window.resetWarModeFormV44?.(); window.applyCurrentVendorBrandToEventForm?.();" class="glow-button text-dark font-bold px-4 py-2 rounded-lg text-sm cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.3)]"><i class="fa-solid fa-plus mr-1"></i> Tambah Event</button>
                             </div>
                         </div>
                         <div class="overflow-x-auto"><table class="w-full text-left text-sm text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-dark/50 border-b border-white/10"><tr><th class="px-4 py-3">Event</th><th class="px-4 py-3">Kategori</th><th class="px-4 py-3">Vendor Pemilik</th><th class="px-4 py-3">Status</th><th class="px-4 py-3 text-right">Aksi</th></tr></thead><tbody id="admin-events-table"></tbody></table></div>
@@ -1541,6 +1542,28 @@
                             </div>
                         </div>
                         <div class="md:col-span-2 border-t border-white/10 pt-4 mt-2">
+                            <h4 class="text-sm text-red-300 font-bold mb-3"><i class="fa-solid fa-bolt mr-2"></i>WAR Mode v44 (Disiapkan, Opsional)</h4>
+                            <label class="flex items-center gap-2 cursor-pointer mb-3">
+                                <input type="checkbox" id="ev-war-mode-enabled" class="w-4 h-4 rounded text-red-500 bg-darker cursor-pointer" onchange="window.toggleWarModeFormV44?.()">
+                                <span class="text-sm font-bold text-red-300">Aktifkan antrean server dan reservasi kuota atomik</span>
+                            </label>
+                            <div id="ev-war-mode-box" class="hidden bg-red-950/30 border border-red-500/30 p-4 rounded-xl">
+                                <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 mb-4 text-xs text-amber-100">
+                                    <b>Jangan diaktifkan sebelum Cloud Functions dan Cloud Tasks v44 dideploy.</b> Jika backend belum aktif, checkout akan diblokir secara aman. Dalam WAR Mode hanya pembayaran penuh yang tersedia.
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div><label class="text-xs text-gray-400 block mb-1">Maksimal pembeli aktif</label><input type="number" id="ev-war-active-limit" min="10" max="500" value="200" class="w-full bg-darker border border-red-500/30 rounded p-2 text-white"></div>
+                                    <div><label class="text-xs text-gray-400 block mb-1">Waktu checkout/pembayaran (menit)</label><input type="number" id="ev-war-payment-minutes" min="5" max="30" value="15" class="w-full bg-darker border border-red-500/30 rounded p-2 text-white"></div>
+                                </div>
+                                <label class="flex items-center gap-2 cursor-pointer mt-4">
+                                    <input type="checkbox" id="ev-war-paused" class="w-4 h-4 rounded text-amber-500 bg-darker cursor-pointer">
+                                    <span class="text-sm text-amber-200">Jeda penerimaan giliran baru</span>
+                                </label>
+                                <button type="button" onclick="window.testWarBackendV44?.()" class="mt-4 w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded-lg text-sm"><i class="fa-solid fa-server mr-2"></i>Uji Kesiapan Backend WAR</button>
+                                <p id="ev-war-backend-status" class="text-xs text-gray-400 mt-2">Backend belum diperiksa. Default WAR Mode tetap nonaktif.</p>
+                            </div>
+                        </div>
+                        <div class="md:col-span-2 border-t border-white/10 pt-4 mt-2">
                             <h4 class="text-sm text-blue-400 font-bold mb-2"><i class="fa-solid fa-comments text-blue-400 mr-2"></i>Pertanyaan Tambahan untuk Pembeli (Opsional)</h4>
                             <label class="flex items-center gap-2 cursor-pointer mb-3">
                                 <input type="checkbox" id="ev-use-custom-form" class="w-4 h-4 rounded text-blue-500 bg-darker cursor-pointer" onchange="document.getElementById('ev-custom-form-box').classList.toggle('hidden', !this.checked)">
@@ -1665,19 +1688,21 @@
                     <div class="absolute inset-0 flex items-center justify-center text-amber-500 text-3xl"><i class="fa-solid fa-hourglass-end"></i></div>
                 </div>
             </div>
-            <h2 class="text-3xl md:text-4xl font-bold text-white mb-3">Antrean Virtual</h2>
-            <p class="text-lg text-gray-300 mb-8 max-w-md mx-auto">Anda berada dalam antrean. Harap tunggu, halaman akan otomatis memuat...</p>
+            <h2 id="waiting-room-title" class="text-3xl md:text-4xl font-bold text-white mb-3">Antrean Virtual</h2>
+            <p id="waiting-room-description" class="text-lg text-gray-300 mb-8 max-w-md mx-auto">Anda berada dalam antrean. Harap tunggu, halaman akan otomatis memuat...</p>
             <div class="flex justify-center gap-2 mb-6">
                 <span class="inline-block w-3 h-3 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0s;"></span>
                 <span class="inline-block w-3 h-3 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0.2s;"></span>
                 <span class="inline-block w-3 h-3 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0.4s;"></span>
             </div>
             <div class="bg-dark/70 rounded-2xl p-6 border border-white/10 max-w-sm mx-auto backdrop-blur-sm">
-                <p class="text-sm text-gray-400 mb-2">Posisi dalam antrean:</p>
+                <p id="waiting-room-position-label" class="text-sm text-gray-400 mb-2">Posisi dalam antrean:</p>
                 <p class="text-4xl font-black text-amber-500 mb-2" id="waiting-room-position">---</p>
-                <p class="text-xs text-gray-500">Pengunjung aktif: <span id="waiting-room-count" class="text-white font-bold">0</span> / 500</p>
+                <p class="text-xs text-gray-500">Pengunjung aktif: <span id="waiting-room-count" class="text-white font-bold">0</span> / <span id="waiting-room-capacity">500</span></p>
+                <p id="waiting-room-timer" class="text-sm text-amber-300 font-bold mt-3"></p>
             </div>
-            <p class="text-xs text-gray-500 mt-6">Jangan tutup halaman ini. Sistem akan otomatis mengalihkan Anda ke halaman checkout.</p>
+            <button id="waiting-room-action" type="button" class="hidden mt-5 bg-amber-500 hover:bg-amber-400 text-slate-950 px-5 py-2 rounded-lg font-bold"></button>
+            <p id="waiting-room-footnote" class="text-xs text-gray-500 mt-6">Jangan tutup halaman ini. Sistem akan otomatis mengalihkan Anda ke halaman checkout.</p>
         </div>
     </div>
 
@@ -1748,7 +1773,7 @@
 
 
 
-    <script src="./assets/js/runtime-base.js?v=43-festival-tribun"></script>
+    <script src="./assets/js/runtime-base.js?v=44-war-mode-preparation"></script>
 	<script src="./assets/js/report-pdf-overrides.js"></script>
 <script src="./assets/js/buyer-report-overrides.js"></script>
 <!-- Extension: Editable Category Labels per Event -->

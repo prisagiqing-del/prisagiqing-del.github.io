@@ -1,4 +1,4 @@
-        window.TIKETKAKA_RELEASE = 'v43-festival-tribun';
+        window.TIKETKAKA_RELEASE = 'v44-war-mode-preparation';
 
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67)) || (e.ctrlKey && e.keyCode == 85)) return false; };
@@ -1087,7 +1087,7 @@
                 return;
             }
             try {
-                navigator.serviceWorker.register('/sw.js?v=43-festival-tribun', { updateViaCache: 'none' }).catch(() => {});
+                navigator.serviceWorker.register('/sw.js?v=44-war-mode-preparation', { updateViaCache: 'none' }).catch(() => {});
             } catch (err) {
                 console.warn('SW registration skipped:', err);
             }
@@ -3857,15 +3857,17 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             adminEventsCount++;
                             const canEdit = window.isSuperAdmin || theOwner === window.currentUserData?.uid;
                             const editButton = canEdit ? `<button type="button" onclick="openEditEvent('${safeEventKey}')" class="tk-event-action tk-event-action-edit" title="Edit event"><i class="fa-solid fa-pen-to-square"></i><span>Edit</span></button>` : '';
+                            const warButton = ev.war_mode?.enabled === true ? `<button type="button" onclick="window.openWarControlV44?.('${safeEventKey}')" class="tk-event-action tk-event-action-edit" title="Kontrol WAR Mode"><i class="fa-solid fa-bolt"></i><span>WAR</span></button>` : '';
                             const deleteButton = `<button type="button" onclick="window.deleteEvent('${safeEventKey}')" class="tk-event-action tk-event-action-delete" title="Hapus event"><i class="fa-solid fa-trash"></i><span>Hapus</span></button>`;
-                            actButtons = `${editButton}${deleteButton}`;
+                            actButtons = `${editButton}${warButton}${deleteButton}`;
                         } else {
                             actButtons = `<span class="text-[10px] text-gray-500 bg-white/5 px-2 py-1 rounded" title="Hanya pemilik event atau admin utama dapat menghapus"><i class="fa-solid fa-lock text-gray-400"></i> Hanya Pemilik</span>`;
                         }
                         
                         const showInAdminEvents = window.isSuperAdmin || theOwner === window.currentUserData?.uid;
                         if (showInAdminEvents) {
-                            if(admT) admT.innerHTML += `<tr class="tk-admin-event-row border-b border-white/5"><td class="px-4 py-3"><strong>${safeTitle}</strong></td><td class="px-4 py-3 text-xs text-cyan-300">${safeCategory}</td><td class="px-4 py-3 text-xs text-gray-300">${theOwner === 'SUPER_ADMIN' ? 'Super Admin' : safeOrgName}${ownerLabel}</td><td class="px-4 py-3 text-xs"><span class="tk-status-live"><i class="fa-solid fa-circle"></i> Aktif</span></td><td class="px-4 py-3"><div class="tk-event-actions">${actButtons}</div></td></tr>`;
+                            const warBadge = ev.war_mode?.enabled === true ? `<span class="ml-2 inline-flex items-center rounded-full bg-red-500/20 border border-red-400/30 px-2 py-1 text-[10px] font-bold text-red-200"><i class="fa-solid fa-bolt mr-1"></i>WAR ${parseInt(ev.war_mode.active_limit || 200, 10)}/${parseInt(ev.war_mode.payment_minutes || 15, 10)}m</span>` : '';
+                            if(admT) admT.innerHTML += `<tr class="tk-admin-event-row border-b border-white/5"><td class="px-4 py-3"><strong>${safeTitle}</strong></td><td class="px-4 py-3 text-xs text-cyan-300">${safeCategory}</td><td class="px-4 py-3 text-xs text-gray-300">${theOwner === 'SUPER_ADMIN' ? 'Super Admin' : safeOrgName}${ownerLabel}</td><td class="px-4 py-3 text-xs"><span class="tk-status-live"><i class="fa-solid fa-circle"></i> Aktif</span>${warBadge}</td><td class="px-4 py-3"><div class="tk-event-actions">${actButtons}</div></td></tr>`;
                         }
                         
                         if (tiket.reg_eco_q !== undefined) {
@@ -5032,10 +5034,15 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         hasPending = true;
                         const pendingLabel = (p.type || '').toString().toUpperCase() === 'UPGRADE' ? `Upgrade dari ${p.currentCategory || 'tiket'} ke ${p.category}` : `${p.qty || 1} Tiket - Kategori ${p.category || '-'}`;
                         const isProcessing = status === 'PROCESSING';
+                        const isWar = p.warMode === true;
+                        const proofSubmitted = !!p.warProofSubmittedAt || p.reservationStatus === 'WAITING_VALIDATION';
+                        const warTimer = isWar && p.expiresAt ? `<div class="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-100"><i class="fa-solid fa-clock mr-2"></i>Waktu pembayaran: <b data-war-expires-at="${Number(p.expiresAt || 0)}">--:--</b></div>` : '';
                         const pendingAction = isProcessing
                             ? `<div class="w-full bg-cyan-500/10 border border-cyan-400/30 text-cyan-200 font-bold py-3 rounded-lg text-sm text-center"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Sedang diterbitkan oleh admin</div>`
-                            : `<button type="button" onclick="window.sendWAProof('${k}', \`${p.eventName || ''}\`, '${p.category || ''}', ${p.qty || 1}, ${p.total || 0}, '${p.ownerId || 'SUPER_ADMIN'}')" class="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3 rounded-lg text-sm transition-colors shadow-lg cursor-pointer"><i class="fa-brands fa-whatsapp text-lg mr-2"></i> Kirim Bukti Pembayaran ke WA Admin</button>`;
-                        pendingCards.push(`<div class="glass-card rounded-2xl p-6 border ${isProcessing ? 'border-cyan-500/50' : 'border-yellow-500/50'} relative"><div class="absolute top-0 right-0 ${isProcessing ? 'bg-cyan-500' : 'bg-yellow-500'} text-dark font-bold px-4 py-1 text-xs rounded-bl-lg">${isProcessing ? 'DIPROSES' : 'PENDING'}</div><h3 class="font-bold text-xl text-white mb-1">${p.eventName || '-'}</h3><p class="text-sm text-gray-300 mb-2">${pendingLabel}</p><p class="font-bold text-green-400 mb-4 text-lg">Total: ${formatRp(p.total || 0)}</p>${pendingAction}</div>`);
+                            : (proofSubmitted
+                                ? `<div class="w-full bg-emerald-500/10 border border-emerald-400/30 text-emerald-200 font-bold py-3 rounded-lg text-sm text-center"><i class="fa-solid fa-circle-check mr-2"></i>Bukti ditandai terkirim • Menunggu validasi Admin</div>`
+                                : `<button type="button" onclick="window.sendWAProof('${k}', \`${p.eventName || ''}\`, '${p.category || ''}', ${p.qty || 1}, ${p.total || 0}, '${p.ownerId || 'SUPER_ADMIN'}')" class="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3 rounded-lg text-sm transition-colors shadow-lg cursor-pointer"><i class="fa-brands fa-whatsapp text-lg mr-2"></i> Kirim Bukti Pembayaran ke WA Admin</button>`);
+                        pendingCards.push(`<div class="glass-card rounded-2xl p-6 border ${isProcessing ? 'border-cyan-500/50' : (isWar ? 'border-red-500/50' : 'border-yellow-500/50')} relative"><div class="absolute top-0 right-0 ${isProcessing ? 'bg-cyan-500' : (isWar ? 'bg-red-500' : 'bg-yellow-500')} text-dark font-bold px-4 py-1 text-xs rounded-bl-lg">${isProcessing ? 'DIPROSES' : (isWar ? 'WAR MODE' : 'PENDING')}</div><h3 class="font-bold text-xl text-white mb-1">${p.eventName || '-'}</h3><p class="text-sm text-gray-300 mb-2">${pendingLabel}</p><p class="font-bold text-green-400 mb-4 text-lg">Total: ${formatRp(p.total || 0)}</p>${warTimer}${pendingAction}</div>`);
                         return;
                     }
                     hasHistory = true;
@@ -8198,6 +8205,17 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     if (tribunBox) tribunBox.classList.add('hidden');
                     if (tribunList) tribunList.innerHTML = '';
                 }
+
+                const warMode = ev.war_mode || {};
+                const warEnabledEl = document.getElementById('ev-war-mode-enabled');
+                const warPausedEl = document.getElementById('ev-war-paused');
+                if (warEnabledEl) warEnabledEl.checked = warMode.enabled === true;
+                if (warPausedEl) warPausedEl.checked = warMode.paused === true;
+                safeSetValue('ev-war-active-limit', Math.min(500, Math.max(10, parseInt(warMode.active_limit || '200', 10) || 200)));
+                safeSetValue('ev-war-payment-minutes', Math.min(30, Math.max(5, parseInt(warMode.payment_minutes || '15', 10) || 15)));
+                window.toggleWarModeFormV44?.();
+                const warBackendStatus = document.getElementById('ev-war-backend-status');
+                if (warBackendStatus) warBackendStatus.textContent = warMode.enabled === true ? 'WAR Mode tersimpan aktif. Pastikan backend v44 sudah dideploy.' : 'WAR Mode nonaktif. Sistem v43 tetap digunakan.';
                 
                 openModal('add-event-modal'); 
             } catch(e){
@@ -8320,6 +8338,24 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     throw new Error('Tanggal mulai deposit tidak boleh melewati tanggal akhir deposit.');
                 }
 
+                const warModeEnabled = document.getElementById('ev-war-mode-enabled')?.checked === true;
+                const warActiveLimit = Math.min(500, Math.max(10, parseInt(document.getElementById('ev-war-active-limit')?.value || '200', 10) || 200));
+                const warPaymentMinutes = Math.min(30, Math.max(5, parseInt(document.getElementById('ev-war-payment-minutes')?.value || '15', 10) || 15));
+                const warPaused = document.getElementById('ev-war-paused')?.checked === true;
+                if (warModeEnabled && depositEnabled) {
+                    const confirmation = await Swal.fire({
+                        icon: 'warning',
+                        title: 'WAR Mode Hanya Pembayaran Penuh',
+                        text: 'Deposit event tetap tersimpan, tetapi pilihan Deposit disembunyikan selama WAR Mode aktif. Lanjutkan?',
+                        showCancelButton: true,
+                        confirmButtonText: 'Lanjutkan',
+                        cancelButtonText: 'Batal',
+                        background: '#1e293b',
+                        color: '#fff'
+                    });
+                    if (!confirmation.isConfirmed) throw new Error('Penyimpanan dibatalkan untuk memeriksa pengaturan deposit.');
+                }
+
                 const ownerBrandData = (window.usersMapCache && theOwnerId !== 'SUPER_ADMIN') ? (window.usersMapCache[theOwnerId] || {}) : (window.currentUserData || {});
                 const resolvedOrgName = (document.getElementById('ev-org-name')?.value || '').trim() || ownerBrandData.nama || 'Tiket Kaka';
                 const resolvedOrgLogo = window.safeImageUrl((document.getElementById('ev-org-logo')?.value || '').trim(), '') || window.safeImageUrl(ownerBrandData.logoUrl || ownerBrandData.vendorLogoUrl || '', '');
@@ -8346,6 +8382,14 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     ticket_structure_version: 'v40',
                     ticket_variants: ticketVariants,
                     ownerId: theOwnerId,
+                    war_mode: {
+                        enabled: warModeEnabled,
+                        paused: warPaused,
+                        active_limit: warActiveLimit,
+                        payment_minutes: warPaymentMinutes,
+                        prepared_version: 'v44',
+                        backend_required: true
+                    },
                     deposit_enabled: depositEnabled,
                     deposit_from: depositFromValue,
                     deposit_to: depositToValue,
@@ -12453,3 +12497,504 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             Object.entries(counts).forEach(([key, count]) => { updates[`events/${eventId}/ticket_variants/${key}/sold`] = count; });
             if (Object.keys(updates).length) await db.ref().update(updates);
         };
+        (function() {
+            'use strict';
+
+            window.TIKETKAKA_WAR_VERSION = 'v44';
+            window.TIKETKAKA_WAR_FUNCTIONS_REGION = window.TIKETKAKA_WAR_FUNCTIONS_REGION || 'asia-southeast1';
+            window.__warModeV44 = window.__warModeV44 || {
+                eventId: '',
+                uid: '',
+                queue: null,
+                publicState: null,
+                queueRef: null,
+                stateRef: null,
+                countdownTimer: null,
+                dashboardTimer: null,
+                backendReady: false,
+                backendChecked: false,
+                functions: null,
+                emulatorConnected: false
+            };
+
+            const state = window.__warModeV44;
+            const legacyInitWaitingRoom = window.initWaitingRoom;
+            const legacyCleanupWaitingRoom = window.cleanupWaitingRoom;
+            const legacyProcessCheckout = window.processCheckout;
+            const legacySendWAProof = window.sendWAProof;
+
+            function esc(value) {
+                return String(value == null ? '' : value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function cleanCallableError(error, fallback) {
+                const message = error?.message || error?.details || fallback || 'Layanan WAR Mode belum tersedia.';
+                return String(message).replace(/^FirebaseError:\s*/i, '').replace(/^INTERNAL:\s*/i, '');
+            }
+
+            window.getWarFunctionsV44 = function() {
+                if (state.functions) return state.functions;
+                if (!window.firebase || typeof firebase.app !== 'function' || typeof firebase.app().functions !== 'function') return null;
+                const functions = firebase.app().functions(window.TIKETKAKA_WAR_FUNCTIONS_REGION);
+                if (!state.emulatorConnected && localStorage.getItem('tiketkaka_use_functions_emulator_v44') === '1' && typeof functions.useEmulator === 'function') {
+                    functions.useEmulator('127.0.0.1', 5001);
+                    state.emulatorConnected = true;
+                }
+                state.functions = functions;
+                return functions;
+            };
+
+            window.callWarFunctionV44 = async function(name, data) {
+                const functions = window.getWarFunctionsV44();
+                if (!functions) throw new Error('Firebase Functions belum dimuat. Deploy backend v44 terlebih dahulu.');
+                const callable = functions.httpsCallable(name);
+                const result = await callable(data || {});
+                return result?.data || {};
+            };
+
+            window.getWarConfigV44 = function(eventId) {
+                const ev = window.eventDataMap?.[eventId] || {};
+                const raw = ev.war_mode || {};
+                return {
+                    enabled: raw.enabled === true,
+                    paused: raw.paused === true,
+                    activeLimit: Math.min(500, Math.max(10, parseInt(raw.active_limit || '200', 10) || 200)),
+                    paymentMinutes: Math.min(30, Math.max(5, parseInt(raw.payment_minutes || '15', 10) || 15)),
+                    backendRequired: raw.backend_required !== false
+                };
+            };
+
+            window.isWarModeEventV44 = function(eventId) {
+                return window.getWarConfigV44(eventId).enabled === true;
+            };
+
+            function setText(id, value) {
+                const node = document.getElementById(id);
+                if (node) node.textContent = value;
+            }
+
+            function showEventPage() {
+                const page = document.getElementById('page-event-detail');
+                if (page) {
+                    page.style.display = '';
+                    page.classList.add('active');
+                }
+            }
+
+            function showOverlay(options) {
+                const overlay = document.getElementById('waiting-room-overlay');
+                if (!overlay) return;
+                setText('waiting-room-title', options.title || 'Antrean Virtual');
+                setText('waiting-room-description', options.description || 'Anda berada dalam antrean. Harap tunggu...');
+                setText('waiting-room-position-label', options.positionLabel || 'Posisi dalam antrean:');
+                setText('waiting-room-position', options.position || '---');
+                setText('waiting-room-count', options.activeCount == null ? '0' : String(options.activeCount));
+                setText('waiting-room-capacity', options.activeLimit == null ? '200' : String(options.activeLimit));
+                setText('waiting-room-timer', options.timer || '');
+                setText('waiting-room-footnote', options.footnote || 'Jangan tutup halaman ini. Posisi antrean tersimpan pada akun Anda.');
+                const action = document.getElementById('waiting-room-action');
+                if (action) {
+                    action.classList.toggle('hidden', !options.actionLabel);
+                    action.textContent = options.actionLabel || '';
+                    action.onclick = options.action || null;
+                }
+                overlay.classList.add('show');
+                const page = document.getElementById('page-event-detail');
+                if (page) page.style.display = 'none';
+            }
+
+            function hideOverlay() {
+                const overlay = document.getElementById('waiting-room-overlay');
+                if (overlay) overlay.classList.remove('show');
+                showEventPage();
+            }
+
+            function formatRemaining(ms) {
+                const seconds = Math.max(0, Math.ceil(ms / 1000));
+                const minutes = Math.floor(seconds / 60);
+                const rest = seconds % 60;
+                return `${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
+            }
+
+            function forceFullPayment(eventId) {
+                const isWar = window.isWarModeEventV44(eventId);
+                const checkoutRadio = document.querySelector('input[name="co-payment-type"][value="checkout"]');
+                if (isWar && checkoutRadio) checkoutRadio.checked = true;
+                if (isWar) document.getElementById('co-payment-deposit-option')?.classList.add('hidden');
+                if (isWar) {
+                    document.getElementById('deposit-section')?.classList.add('hidden');
+                    document.getElementById('btn-process-deposit')?.classList.add('hidden');
+                }
+            }
+
+            function updateCheckoutBanner(queue) {
+                const box = document.getElementById('war-checkout-status-v44');
+                if (!box) return;
+                const eventId = document.getElementById('co-evid')?.value || state.eventId;
+                if (!window.isWarModeEventV44(eventId)) {
+                    box.classList.add('hidden');
+                    return;
+                }
+                box.classList.remove('hidden');
+                const status = String(queue?.status || 'WAITING').toUpperCase();
+                const text = document.getElementById('war-checkout-status-text-v44');
+                if (text) {
+                    if (status === 'ACTIVE') text.textContent = 'Giliran Anda aktif. Selesaikan checkout sebelum waktu habis.';
+                    else if (status === 'WAITING_PAYMENT') text.textContent = 'Kuota sudah direservasi. Segera bayar dan kirim bukti.';
+                    else if (status === 'WAITING_VALIDATION') text.textContent = 'Bukti telah ditandai. Menunggu validasi Admin.';
+                    else text.textContent = 'Checkout memakai antrean server dan reservasi kuota atomik.';
+                }
+                const countdown = document.getElementById('war-checkout-countdown-v44');
+                if (countdown) {
+                    const expiresAt = Number(queue?.expiresAt || queue?.activeExpiresAt || 0) || 0;
+                    countdown.textContent = expiresAt ? formatRemaining(expiresAt - Date.now()) : '--:--';
+                }
+                forceFullPayment(eventId);
+            }
+
+            function startCountdown() {
+                if (state.countdownTimer) clearInterval(state.countdownTimer);
+                state.countdownTimer = setInterval(() => {
+                    const queue = state.queue || {};
+                    const expiresAt = Number(queue.expiresAt || queue.activeExpiresAt || 0) || 0;
+                    if (expiresAt) {
+                        setText('waiting-room-timer', `Waktu tersisa: ${formatRemaining(expiresAt - Date.now())}`);
+                        updateCheckoutBanner(queue);
+                        if (expiresAt <= Date.now() && ['ACTIVE', 'WAITING_PAYMENT'].includes(String(queue.status || '').toUpperCase())) {
+                            window.getWarQueueStateV44(state.eventId).catch(() => null);
+                        }
+                    }
+                    window.updateWarPaymentCountdownsV44();
+                }, 1000);
+            }
+
+            function renderQueue() {
+                const queue = state.queue || {};
+                const publicState = state.publicState || {};
+                const status = String(queue.status || '').toUpperCase();
+                const activeLimit = Number(publicState.activeLimit || queue.activeLimit || window.getWarConfigV44(state.eventId).activeLimit) || 200;
+                const activeCount = Number(publicState.activeCount || queue.activeCount || 0) || 0;
+                const lastActivated = Number(publicState.lastActivatedQueueNumber || 0) || 0;
+                const position = Math.max(1, (Number(queue.queueNumber || 0) || 1) - lastActivated);
+                updateCheckoutBanner(queue);
+
+                if (status === 'ACTIVE') {
+                    hideOverlay();
+                    return;
+                }
+                if (status === 'WAITING_PAYMENT') {
+                    hideOverlay();
+                    return;
+                }
+                if (status === 'WAITING_VALIDATION' || status === 'APPROVED') {
+                    hideOverlay();
+                    return;
+                }
+                if (status === 'WAITING') {
+                    showOverlay({
+                        title: 'Antrean Pembelian Tiket',
+                        description: publicState.paused ? 'Antrean sedang dijeda oleh penyelenggara.' : 'Nomor antrean Anda tersimpan. Sistem akan membuka checkout otomatis ketika giliran tiba.',
+                        positionLabel: 'Perkiraan posisi antrean:',
+                        position: String(position),
+                        activeCount,
+                        activeLimit,
+                        timer: `Nomor antrean: ${queue.queueNumber || '-'}`,
+                        footnote: 'Satu akun hanya memiliki satu antrean untuk event ini.'
+                    });
+                    return;
+                }
+                if (['EXPIRED', 'REJECTED', 'CANCELLED'].includes(status)) {
+                    showOverlay({
+                        title: 'Sesi Antrean Berakhir',
+                        description: status === 'REJECTED' ? 'Pesanan ditolak dan kuota telah dikembalikan.' : 'Waktu checkout/pembayaran telah berakhir dan reservasi dilepas.',
+                        positionLabel: 'Status:',
+                        position: status,
+                        activeCount,
+                        activeLimit,
+                        actionLabel: 'Masuk Antrean Lagi',
+                        action: window.retryWarQueueV44,
+                        footnote: 'Sistem akan membuat nomor antrean baru setelah pemeriksaan transaksi.'
+                    });
+                    return;
+                }
+            }
+
+            function detachWarListeners() {
+                if (state.queueRef) state.queueRef.off();
+                if (state.stateRef) state.stateRef.off();
+                state.queueRef = null;
+                state.stateRef = null;
+                if (state.countdownTimer) clearInterval(state.countdownTimer);
+                state.countdownTimer = null;
+            }
+
+            function attachWarListeners(eventId, uid) {
+                detachWarListeners();
+                state.queueRef = db.ref(`warQueue/${eventId}/${uid}`);
+                state.stateRef = db.ref(`warMode/${eventId}/publicState`);
+                state.queueRef.on('value', snap => {
+                    state.queue = snap.val() || state.queue || {};
+                    renderQueue();
+                });
+                state.stateRef.on('value', snap => {
+                    state.publicState = snap.val() || {};
+                    renderQueue();
+                });
+                startCountdown();
+            }
+
+            window.getWarQueueStateV44 = async function(eventId) {
+                const response = await window.callWarFunctionV44('getWarQueueState', {eventId});
+                state.queue = response;
+                renderQueue();
+                return response;
+            };
+
+            window.retryWarQueueV44 = async function() {
+                if (!state.eventId) return;
+                state.queue = null;
+                await window.initWarWaitingRoomV44(state.eventId, true);
+            };
+
+            window.checkWarBackendV44 = async function(showSuccess) {
+                try {
+                    const response = await window.callWarFunctionV44('warHealth', {});
+                    state.backendReady = response.ready === true && response.version === 'v44';
+                    state.backendChecked = true;
+                    const node = document.getElementById('ev-war-backend-status');
+                    if (node) {
+                        node.textContent = state.backendReady ? `Backend siap • ${response.version} • ${response.region}` : 'Backend belum siap';
+                        node.className = state.backendReady ? 'text-xs text-emerald-300 mt-2' : 'text-xs text-red-300 mt-2';
+                    }
+                    if (showSuccess) Swal.fire({icon:'success', title:'Backend WAR Siap', text:`Functions ${response.version} aktif di ${response.region}.`, background:'#1e293b', color:'#fff'});
+                    return response;
+                } catch (error) {
+                    state.backendReady = false;
+                    state.backendChecked = true;
+                    const node = document.getElementById('ev-war-backend-status');
+                    if (node) {
+                        node.textContent = 'Backend WAR belum aktif. Biarkan WAR Mode nonaktif sampai Blaze/Functions selesai dideploy.';
+                        node.className = 'text-xs text-amber-300 mt-2';
+                    }
+                    if (showSuccess) Swal.fire({icon:'warning', title:'Backend Belum Aktif', text:cleanCallableError(error), background:'#1e293b', color:'#fff'});
+                    throw error;
+                }
+            };
+
+            window.testWarBackendV44 = function() {
+                return window.checkWarBackendV44(true).catch(() => null);
+            };
+
+            window.initWarWaitingRoomV44 = async function(eventId) {
+                const user = window.auth?.currentUser;
+                state.eventId = eventId;
+                window.waitingRoomData.currentEventId = eventId;
+                window.waitingRoomData.enabled = true;
+                forceFullPayment(eventId);
+                if (!user) {
+                    showOverlay({
+                        title: 'Login Diperlukan',
+                        description: 'Silakan login agar nomor antrean tersimpan pada akun Anda.',
+                        positionLabel: 'Status:',
+                        position: 'LOGIN',
+                        activeCount: 0,
+                        activeLimit: window.getWarConfigV44(eventId).activeLimit,
+                        actionLabel: 'Login',
+                        action: () => { hideOverlay(); openModal('login-modal'); },
+                        footnote: 'Setelah login, antrean akan dimulai otomatis.'
+                    });
+                    return;
+                }
+                state.uid = user.uid;
+                window.waitingRoomData.currentUserId = user.uid;
+                showOverlay({
+                    title: 'Menghubungkan Antrean',
+                    description: 'Sistem sedang memeriksa backend dan nomor antrean Anda.',
+                    positionLabel: 'Status:',
+                    position: '...',
+                    activeCount: 0,
+                    activeLimit: window.getWarConfigV44(eventId).activeLimit,
+                    footnote: 'Jangan memuat ulang halaman selama proses ini.'
+                });
+                try {
+                    await window.checkWarBackendV44(false);
+                    const response = await window.callWarFunctionV44('joinWarQueue', {eventId});
+                    state.queue = response;
+                    attachWarListeners(eventId, user.uid);
+                    renderQueue();
+                } catch (error) {
+                    const message = cleanCallableError(error, 'Backend WAR Mode belum aktif.');
+                    showOverlay({
+                        title: 'WAR Mode Belum Siap',
+                        description: message,
+                        positionLabel: 'Checkout:',
+                        position: 'DIBLOKIR',
+                        activeCount: 0,
+                        activeLimit: window.getWarConfigV44(eventId).activeLimit,
+                        actionLabel: 'Coba Lagi',
+                        action: window.retryWarQueueV44,
+                        footnote: 'Tidak ada fallback ke checkout lama saat WAR Mode aktif, agar kuota tetap aman.'
+                    });
+                }
+            };
+
+            window.initWaitingRoom = function(eventId) {
+                if (!window.isWarModeEventV44(eventId)) return legacyInitWaitingRoom?.(eventId);
+                return window.initWarWaitingRoomV44(eventId);
+            };
+
+            window.cleanupWaitingRoom = function() {
+                const eventId = state.eventId || window.waitingRoomData?.currentEventId;
+                if (!eventId || !window.isWarModeEventV44(eventId)) return legacyCleanupWaitingRoom?.();
+                detachWarListeners();
+                const overlay = document.getElementById('waiting-room-overlay');
+                if (overlay) overlay.classList.remove('show');
+                window.waitingRoomData.enabled = false;
+                window.waitingRoomData.currentEventId = null;
+                window.waitingRoomData.currentUserId = null;
+                state.eventId = '';
+                state.uid = '';
+                state.queue = null;
+                state.publicState = null;
+            };
+
+            function getSelectedSeats() {
+                const checkboxBox = document.getElementById('co-seat-checkboxes');
+                if (checkboxBox && !checkboxBox.classList.contains('hidden')) {
+                    return Array.from(checkboxBox.querySelectorAll('input[type="checkbox"]:checked')).map(item => item.value).filter(Boolean);
+                }
+                return String(document.getElementById('co-seat')?.value || '').split(/\s*,\s*/).filter(Boolean);
+            }
+
+            async function showWarPaymentModal(result, eventData) {
+                const ownerId = eventData.ownerId || 'SUPER_ADMIN';
+                if (ownerId !== 'SUPER_ADMIN') await window.loadOwnerPaymentInfo?.(ownerId);
+                const payment = window.getPaymentInfoForOwner?.(ownerId) || {};
+                const bank = String(payment.bank || '').trim();
+                const name = String(payment.name || '').trim();
+                const qris = String(payment.qris || '').trim();
+                if (!bank && !qris) throw new Error('Metode pembayaran penyelenggara belum diatur. Reservasi tetap aktif sampai waktu berakhir; segera hubungi Admin.');
+                let html = `<div class="text-left text-sm mb-4"><div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 mb-3"><p class="text-amber-200 font-bold">Reservasi kuota berhasil</p><p class="text-xs text-gray-300 mt-1">Bayar dan klik kirim bukti sebelum <b data-war-expires-at="${Number(result.expiresAt || 0)}">${formatRemaining(Number(result.expiresAt || 0) - Date.now())}</b>.</p></div><p>Total pembayaran: <b class="text-green-400 text-lg">${formatRp(result.total)}</b></p>`;
+                if (bank) html += `<div class="bg-dark p-4 rounded-xl mt-3 border border-white/10"><p class="text-xs text-gray-400">Nomor Rekening / E-Wallet:</p><p class="font-bold text-amber-500 text-xl tracking-wide">${esc(bank)}</p><p class="text-xs text-gray-400 mt-2">Atas Nama:</p><p class="font-bold text-white text-lg">${esc(name || 'Belum dicantumkan')}</p></div>`;
+                if (qris) html += `<div class="mt-4 text-center"><p class="text-xs text-gray-400 mb-2">Atau Scan QRIS:</p><img src="${esc(qris)}" class="w-48 mx-auto rounded-xl shadow-lg border border-white/10 mb-2"></div>`;
+                html += `</div><button type="button" onclick="window.sendWAProof('${esc(result.paymentId)}','${esc(eventData.title || 'Event')}','${esc(result.category)}',${Number(result.qty || 1)},${Number(result.total || 0)},'${esc(ownerId)}'); Swal.close(); showPage('user-dash');" class="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3 rounded-lg text-sm"><i class="fa-brands fa-whatsapp text-lg mr-2"></i>Kirim Bukti Pembayaran ke WA Admin</button>`;
+                Swal.fire({title:'Pesanan WAR Dibuat!', html, showConfirmButton:false, allowOutsideClick:false, background:'#1e293b', color:'#fff'});
+            }
+
+            window.processWarCheckoutV44 = async function(e) {
+                e?.preventDefault?.();
+                const eventId = document.getElementById('co-evid')?.value || '';
+                const eventData = window.eventDataMap?.[eventId];
+                const user = window.auth?.currentUser;
+                const button = document.getElementById('btn-process-co');
+                if (!user) return Swal.fire({icon:'warning', title:'Silakan Login', background:'#1e293b', color:'#fff'});
+                if (!eventData) return Swal.fire({icon:'error', title:'Event Tidak Ditemukan', background:'#1e293b', color:'#fff'});
+                if (!document.getElementById('det-agree')?.checked) return Swal.fire({icon:'warning', title:'Harap Centang Persetujuan', background:'#1e293b', color:'#fff'});
+                const questions = window.currentEventCustomQuestions || [];
+                for (let i = 0; i < questions.length; i++) {
+                    if (!String(window.currentCustomFormAnswers?.[i] || '').trim()) return Swal.fire({icon:'warning', title:'Data Tambahan Belum Lengkap', background:'#1e293b', color:'#fff'});
+                }
+                const category = document.getElementById('co-category')?.value || '';
+                const qty = parseInt(document.getElementById('co-qty')?.value || '0', 10);
+                const selectedTribun = document.getElementById('co-tribun')?.value || '';
+                const selectedSeats = getSelectedSeats();
+                if (!Number.isInteger(qty) || qty < 1 || qty > 6) return Swal.fire({icon:'error', title:'Jumlah Tiket Tidak Valid', text:'Pilih 1 sampai 6 tiket.', background:'#1e293b', color:'#fff'});
+                if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Reservasi Kuota...'; }
+                try {
+                    const result = await window.callWarFunctionV44('createWarOrder', {
+                        eventId,
+                        category,
+                        qty,
+                        selectedTribun,
+                        selectedSeats,
+                        customFormAnswers: window.currentCustomFormAnswers || {}
+                    });
+                    state.queue = {...(state.queue || {}), status:'WAITING_PAYMENT', orderId:result.orderId, paymentId:result.paymentId, expiresAt:result.expiresAt};
+                    updateCheckoutBanner(state.queue);
+                    await showWarPaymentModal(result, eventData);
+                } catch (error) {
+                    Swal.fire({icon:'error', title:'Checkout WAR Gagal', text:cleanCallableError(error), background:'#1e293b', color:'#fff'});
+                    await window.getWarQueueStateV44(eventId).catch(() => null);
+                } finally {
+                    if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-credit-card mr-2"></i> Bayar Penuh'; }
+                }
+            };
+
+            window.processCheckout = async function(e) {
+                const eventId = document.getElementById('co-evid')?.value || '';
+                if (!window.isWarModeEventV44(eventId)) return legacyProcessCheckout?.(e);
+                e?.preventDefault?.();
+                if (window.__warCheckoutSubmissionLockV44) return Toast.fire({icon:'info', title:'Checkout sedang diproses.'});
+                window.__warCheckoutSubmissionLockV44 = true;
+                try { return await window.processWarCheckoutV44(e); }
+                finally { window.__warCheckoutSubmissionLockV44 = false; }
+            };
+
+            window.sendWAProof = async function(paymentId, eventName, category, qty, total, ownerId) {
+                try {
+                    const snap = await db.ref(`payments/${paymentId}`).once('value');
+                    const payment = snap.val() || {};
+                    if (payment.warMode === true && !payment.warProofSubmittedAt) {
+                        await window.callWarFunctionV44('markWarProofSubmitted', {paymentId});
+                    }
+                    return await legacySendWAProof?.(paymentId, eventName, category, qty, total, ownerId);
+                } catch (error) {
+                    return Swal.fire({icon:'error', title:'Bukti Belum Dapat Dikirim', text:cleanCallableError(error), background:'#1e293b', color:'#fff'});
+                }
+            };
+
+            window.resetWarModeFormV44 = function() {
+                const enabled = document.getElementById('ev-war-mode-enabled');
+                const paused = document.getElementById('ev-war-paused');
+                if (enabled) enabled.checked = false;
+                if (paused) paused.checked = false;
+                const limit = document.getElementById('ev-war-active-limit');
+                const minutes = document.getElementById('ev-war-payment-minutes');
+                if (limit) limit.value = '200';
+                if (minutes) minutes.value = '15';
+                window.toggleWarModeFormV44();
+            };
+
+            window.toggleWarModeFormV44 = function() {
+                const enabled = document.getElementById('ev-war-mode-enabled')?.checked === true;
+                document.getElementById('ev-war-mode-box')?.classList.toggle('hidden', !enabled);
+            };
+
+            window.openWarControlV44 = async function(eventId) {
+                const eventData = window.eventDataMap?.[eventId] || {};
+                const config = window.getWarConfigV44(eventId);
+                const choice = await Swal.fire({
+                    title: 'Kontrol WAR Mode',
+                    html: `<div class="text-left text-sm text-gray-300"><p>Event: <b>${esc(eventData.title || eventId)}</b></p><p>Slot aktif: <b>${config.activeLimit}</b></p><p>Waktu: <b>${config.paymentMinutes} menit</b></p><p>Status: <b>${config.paused ? 'DIJEDA' : (config.enabled ? 'AKTIF' : 'NONAKTIF')}</b></p></div>`,
+                    input: 'select',
+                    inputOptions: {SYNC:'Sinkronkan hitungan', PROMOTE:'Majukan antrean', PAUSE:'Jeda antrean', RESUME:'Lanjutkan antrean'},
+                    inputPlaceholder: 'Pilih tindakan',
+                    showCancelButton: true,
+                    confirmButtonText: 'Jalankan',
+                    cancelButtonText: 'Batal',
+                    background:'#1e293b', color:'#fff'
+                });
+                if (!choice.isConfirmed || !choice.value) return;
+                try {
+                    await window.callWarFunctionV44('adminWarControl', {eventId, action:choice.value});
+                    Toast.fire({icon:'success', title:'Kontrol WAR berhasil dijalankan.'});
+                } catch (error) {
+                    Swal.fire({icon:'error', title:'Kontrol WAR Gagal', text:cleanCallableError(error), background:'#1e293b', color:'#fff'});
+                }
+            };
+
+            window.updateWarPaymentCountdownsV44 = function() {
+                document.querySelectorAll('[data-war-expires-at]').forEach(node => {
+                    const expiresAt = Number(node.getAttribute('data-war-expires-at') || 0) || 0;
+                    node.textContent = expiresAt ? formatRemaining(expiresAt - Date.now()) : '--:--';
+                    node.classList.toggle('text-red-400', expiresAt > 0 && expiresAt <= Date.now());
+                });
+            };
+
+            state.dashboardTimer = setInterval(window.updateWarPaymentCountdownsV44, 1000);
+        })();
