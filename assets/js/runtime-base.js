@@ -1,4 +1,4 @@
-        window.TIKETKAKA_RELEASE = 'v38-vendor-realtime-sales';
+        window.TIKETKAKA_RELEASE = 'v39-vendor-chart-repair';
 
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67)) || (e.ctrlKey && e.keyCode == 85)) return false; };
@@ -1076,7 +1076,7 @@
                 return;
             }
             try {
-                navigator.serviceWorker.register('/sw.js?v=38-vendor-realtime-sales', { updateViaCache: 'none' }).catch(() => {});
+                navigator.serviceWorker.register('/sw.js?v=39-vendor-chart-repair', { updateViaCache: 'none' }).catch(() => {});
             } catch (err) {
                 console.warn('SW registration skipped:', err);
             }
@@ -11648,30 +11648,101 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 });
             } catch (error) {}
         })();
-        // Tiket Kaka v38: realtime sales charts for each Vendor dashboard.
-        window.__vendorSalesRealtimeV38 = window.__vendorSalesRealtimeV38 || {
+        // Tiket Kaka v39: resilient realtime sales charts for each Vendor dashboard.
+        // Reads both ownerId-scoped payments and eventId-scoped legacy payments, then
+        // falls back to the compact analytics summary while keeping Vendor isolation.
+        window.__vendorSalesRealtimeV39 = window.__vendorSalesRealtimeV39 || {
             uid: '',
-            query: null,
-            callback: null,
-            errorCallback: null,
-            payments: {},
-            loaded: false
+            ownerQuery: null,
+            ownerCallback: null,
+            ownerErrorCallback: null,
+            ownerPayments: {},
+            ownerLoaded: false,
+            eventQueries: {},
+            eventPayments: {},
+            eventLoaded: {},
+            summaryRef: null,
+            summaryCallback: null,
+            summaryErrorCallback: null,
+            summaryLoaded: false,
+            lastError: '',
+            lastSource: ''
         };
 
-        window.stopVendorSalesRealtimeV38 = function() {
-            const state = window.__vendorSalesRealtimeV38 || {};
-            if (state.query && state.callback) {
-                try { state.query.off('value', state.callback); } catch (error) {}
+        window.getCurrentVendorSalesUidV39 = function() {
+            return window.currentUserData?.uid || window.auth?.currentUser?.uid || '';
+        };
+
+        window.getOwnedVendorEventIdsV39 = function(vendorId) {
+            if (!vendorId) return [];
+            return Object.entries(window.eventDataMap || {})
+                .filter(([, eventData]) => {
+                    const eventOwnerId = eventData?.ownerId || eventData?.uid || 'SUPER_ADMIN';
+                    return eventOwnerId === vendorId;
+                })
+                .map(([eventId]) => eventId)
+                .sort();
+        };
+
+        window.stopVendorSalesRealtimeV39 = function() {
+            const state = window.__vendorSalesRealtimeV39 || {};
+            if (state.ownerQuery && state.ownerCallback) {
+                try { state.ownerQuery.off('value', state.ownerCallback); } catch (error) {}
+            }
+            Object.values(state.eventQueries || {}).forEach(entry => {
+                if (!entry?.query || !entry?.callback) return;
+                try { entry.query.off('value', entry.callback); } catch (error) {}
+            });
+            if (state.summaryRef && state.summaryCallback) {
+                try { state.summaryRef.off('value', state.summaryCallback); } catch (error) {}
             }
             state.uid = '';
-            state.query = null;
-            state.callback = null;
-            state.errorCallback = null;
-            state.payments = {};
-            state.loaded = false;
+            state.ownerQuery = null;
+            state.ownerCallback = null;
+            state.ownerErrorCallback = null;
+            state.ownerPayments = {};
+            state.ownerLoaded = false;
+            state.eventQueries = {};
+            state.eventPayments = {};
+            state.eventLoaded = {};
+            state.summaryRef = null;
+            state.summaryCallback = null;
+            state.summaryErrorCallback = null;
+            state.summaryLoaded = false;
+            state.lastError = '';
+            state.lastSource = '';
         };
 
-        window.buildVendorRealtimeSalesAnalyticsV38 = function(paymentsData, { ownerId = '', eventId = 'ALL', days = 30 } = {}) {
+        window.scheduleVendorSalesRenderV39 = function(delay = 50) {
+            clearTimeout(window.__vendorSalesRealtimeRenderTimerV39);
+            window.__vendorSalesRealtimeRenderTimerV39 = setTimeout(() => {
+                requestAnimationFrame(() => window.renderMainSalesAnalytics?.());
+            }, Math.max(0, Number(delay) || 0));
+        };
+
+        window.getVendorApprovedSalesTimestampV39 = function(payment) {
+            const candidates = [payment?.approvedAt, payment?.ticketCreatedAt, payment?.createdAt, payment?.updatedAt];
+            for (const candidate of candidates) {
+                const timestamp = Number(candidate || 0);
+                if (Number.isFinite(timestamp) && timestamp > 0) return timestamp;
+            }
+            return 0;
+        };
+
+        window.mergeVendorScopedPaymentsV39 = function() {
+            const state = window.__vendorSalesRealtimeV39 || {};
+            const merged = {};
+            Object.assign(merged, state.ownerPayments || {});
+            Object.values(state.eventPayments || {}).forEach(rows => Object.assign(merged, rows || {}));
+
+            // The normal Vendor dashboard listener already keeps this cache scoped.
+            // Include it as an extra recovery source, while the analytics builder below
+            // still verifies event ownership before counting anything.
+            Object.assign(merged, window.globalPaymentsData || {});
+            return merged;
+        };
+
+        window.buildVendorRealtimeSalesAnalyticsV39 = function(paymentsData, { ownerId = '', eventId = 'ALL', days = 30 } = {}) {
             const now = Date.now();
             const normalizedDays = Math.max(1, Math.min(90, Number(days || 30)));
             const startDate = new Date(now);
@@ -11690,12 +11761,13 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 if (!payment) return;
                 const status = String(payment.status || '').toUpperCase();
                 if (status !== 'APPROVED') return;
-                const paymentOwnerId = window.getSalesAnalyticsOwnerId?.(payment) || payment.ownerId || '';
-                if (ownerId && paymentOwnerId !== ownerId) return;
                 const paymentEventId = String(payment.eventId || '');
                 if (!paymentEventId) return;
+                const eventOwnerId = events[paymentEventId]?.ownerId || events[paymentEventId]?.uid || '';
+                const paymentOwnerId = window.getSalesAnalyticsOwnerId?.(payment) || payment.ownerId || eventOwnerId || '';
+                if (ownerId && paymentOwnerId !== ownerId && eventOwnerId !== ownerId) return;
                 if (eventId !== 'ALL' && paymentEventId !== eventId) return;
-                const timestamp = window.getSalesAnalyticsTimestamp?.(payment) || Number(payment.createdAt || payment.approvedAt || 0);
+                const timestamp = window.getVendorApprovedSalesTimestampV39(payment);
                 if (!timestamp || timestamp < startAt || timestamp > now + 60000) return;
                 const amount = Math.max(0, Number(payment.total || payment.depositAmount || 0) || 0);
                 if (amount <= 0) return;
@@ -11747,114 +11819,183 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const peakHour = hourly.slice()
                 .sort((a, b) => b.orders - a.orders || a.hour - b.hour)[0] || null;
 
-            return {
-                revenue,
-                orders,
-                buyers: buyers.size,
-                daily,
-                hourly,
-                byEvent,
-                peakDate,
-                peakHour
-            };
+            return { revenue, orders, buyers: buyers.size, daily, hourly, byEvent, peakDate, peakHour };
         };
 
-        window.startVendorSalesRealtimeV38 = function() {
-            if (!window.db || !window.isVendor || !window.currentUserData?.uid) return false;
-            const vendorId = window.currentUserData.uid;
-            const state = window.__vendorSalesRealtimeV38;
-            if (state.uid === vendorId && state.query && state.callback) return true;
-            window.stopVendorSalesRealtimeV38();
+        window.buildVendorRealtimeSalesAnalyticsV38 = window.buildVendorRealtimeSalesAnalyticsV39;
 
-            const query = db.ref('payments')
-                .orderByChild('ownerId')
-                .equalTo(vendorId)
-                .limitToLast(window.ADMIN_PENDING_QUERY_LIMIT || 5000);
-            const callback = snapshot => {
-                if (!window.isVendor || window.currentUserData?.uid !== vendorId) return;
-                state.payments = snapshot.val() || {};
-                state.loaded = true;
-                state.uid = vendorId;
-                clearTimeout(window.__vendorSalesRealtimeRenderTimerV38);
-                window.__vendorSalesRealtimeRenderTimerV38 = setTimeout(() => {
-                    requestAnimationFrame(() => {
-                        window.renderMainSalesAnalytics?.();
-                    });
-                }, 40);
-            };
-            const errorCallback = error => {
-                state.loaded = false;
-                console.warn('[v38] Listener grafik penjualan Vendor gagal; memakai cache pembayaran dashboard.', error);
-                window.scheduleSalesAnalyticsRender?.(60);
-            };
+        window.syncVendorEventPaymentListenersV39 = function(vendorId) {
+            const state = window.__vendorSalesRealtimeV39;
+            const eventIds = window.getOwnedVendorEventIdsV39(vendorId);
+            const wanted = new Set(eventIds);
+
+            Object.entries(state.eventQueries || {}).forEach(([eventId, entry]) => {
+                if (wanted.has(eventId)) return;
+                try { entry.query?.off('value', entry.callback); } catch (error) {}
+                delete state.eventQueries[eventId];
+                delete state.eventPayments[eventId];
+                delete state.eventLoaded[eventId];
+            });
+
+            eventIds.slice(0, 100).forEach(eventId => {
+                if (state.eventQueries[eventId]) return;
+                const query = db.ref('payments')
+                    .orderByChild('eventId')
+                    .equalTo(eventId)
+                    .limitToLast(window.ADMIN_PENDING_QUERY_LIMIT || 5000);
+                const callback = snapshot => {
+                    if (!window.isVendor || window.getCurrentVendorSalesUidV39() !== vendorId) return;
+                    state.eventPayments[eventId] = snapshot.val() || {};
+                    state.eventLoaded[eventId] = true;
+                    window.scheduleVendorSalesRenderV39(45);
+                };
+                const errorCallback = error => {
+                    state.eventLoaded[eventId] = false;
+                    state.lastError = error?.message || String(error || 'event query failed');
+                    console.warn(`[v39] Listener penjualan event ${eventId} gagal.`, error);
+                    window.scheduleVendorSalesRenderV39(80);
+                };
+                state.eventQueries[eventId] = { query, callback, errorCallback };
+                query.on('value', callback, errorCallback);
+            });
+        };
+
+        window.startVendorSalesRealtimeV39 = function() {
+            const vendorId = window.getCurrentVendorSalesUidV39();
+            if (!window.db || !window.isVendor || !vendorId) return false;
+            const state = window.__vendorSalesRealtimeV39;
+            if (state.uid && state.uid !== vendorId) window.stopVendorSalesRealtimeV39();
             state.uid = vendorId;
-            state.query = query;
-            state.callback = callback;
-            state.errorCallback = errorCallback;
-            query.on('value', callback, errorCallback);
+
+            if (!state.ownerQuery) {
+                const query = db.ref('payments')
+                    .orderByChild('ownerId')
+                    .equalTo(vendorId)
+                    .limitToLast(window.ADMIN_PENDING_QUERY_LIMIT || 5000);
+                const callback = snapshot => {
+                    if (!window.isVendor || window.getCurrentVendorSalesUidV39() !== vendorId) return;
+                    state.ownerPayments = snapshot.val() || {};
+                    state.ownerLoaded = true;
+                    window.scheduleVendorSalesRenderV39(40);
+                };
+                const errorCallback = error => {
+                    state.ownerLoaded = false;
+                    state.lastError = error?.message || String(error || 'owner query failed');
+                    console.warn('[v39] Listener ownerId gagal; listener per-event tetap digunakan.', error);
+                    window.scheduleVendorSalesRenderV39(80);
+                };
+                state.ownerQuery = query;
+                state.ownerCallback = callback;
+                state.ownerErrorCallback = errorCallback;
+                query.on('value', callback, errorCallback);
+            }
+
+            window.syncVendorEventPaymentListenersV39(vendorId);
+
+            if (!state.summaryRef) {
+                const summaryRef = db.ref(`analytics/sales/${vendorId}`);
+                const summaryCallback = () => {
+                    state.summaryLoaded = true;
+                    window.scheduleVendorSalesRenderV39(55);
+                };
+                const summaryErrorCallback = error => {
+                    state.summaryLoaded = false;
+                    console.warn('[v39] Ringkasan analytics Vendor belum dapat dibaca.', error);
+                };
+                state.summaryRef = summaryRef;
+                state.summaryCallback = summaryCallback;
+                state.summaryErrorCallback = summaryErrorCallback;
+                summaryRef.on('value', summaryCallback, summaryErrorCallback);
+            }
             return true;
         };
 
-        const originalRenderMainSalesAnalyticsV38 = window.renderMainSalesAnalytics;
+        window.startVendorSalesRealtimeV38 = window.startVendorSalesRealtimeV39;
+        window.stopVendorSalesRealtimeV38 = window.stopVendorSalesRealtimeV39;
+
+        window.isVendorSalesPanelVisibleV39 = function() {
+            const panel = document.getElementById('sales-analytics-panel');
+            const tab = document.getElementById('tab-dashboard');
+            if (!panel || !tab || !tab.classList?.contains('active')) return false;
+            const rect = typeof panel.getBoundingClientRect === 'function' ? panel.getBoundingClientRect() : { width: 1, height: 1 };
+            return rect.width > 0 && rect.height > 0;
+        };
+
+        window.renderVendorSalesChartsVisibleV39 = function(analytics, attempt = 0) {
+            if (!window.isVendorSalesPanelVisibleV39()) {
+                if (attempt < 12) setTimeout(() => window.renderVendorSalesChartsVisibleV39(analytics, attempt + 1), 90);
+                return false;
+            }
+            window.renderSalesAnalyticsCharts?.('sales', analytics);
+            [70, 260].forEach(delay => setTimeout(() => {
+                ['sales-event', 'sales-date', 'sales-hour'].forEach(key => {
+                    try { window.__salesAnalyticsCharts?.[key]?.resize?.(); } catch (error) {}
+                });
+            }, delay));
+            return true;
+        };
+
+        const originalRenderMainSalesAnalyticsV39 = window.renderMainSalesAnalytics;
         window.renderMainSalesAnalytics = async function() {
             if (!window.isVendor) {
-                return typeof originalRenderMainSalesAnalyticsV38 === 'function'
-                    ? originalRenderMainSalesAnalyticsV38.apply(this, arguments)
+                return typeof originalRenderMainSalesAnalyticsV39 === 'function'
+                    ? originalRenderMainSalesAnalyticsV39.apply(this, arguments)
                     : undefined;
             }
-            if (!document.getElementById('sales-analytics-panel') || !window.currentUserData?.uid) return;
+            const vendorId = window.getCurrentVendorSalesUidV39();
+            if (!document.getElementById('sales-analytics-panel') || !vendorId) return;
             window.populateMainSalesAnalyticsFilters?.();
-            window.startVendorSalesRealtimeV38();
+            window.startVendorSalesRealtimeV39();
 
-            const vendorId = window.currentUserData.uid;
             const eventId = document.getElementById('sales-analytics-event-filter')?.value || 'ALL';
             const days = Number(document.getElementById('sales-analytics-period-filter')?.value || 30);
-            const realtimeState = window.__vendorSalesRealtimeV38 || {};
-            const realtimePayments = realtimeState.uid === vendorId && realtimeState.loaded
-                ? (realtimeState.payments || {})
-                : (window.globalPaymentsData || {});
-            let analytics = window.buildVendorRealtimeSalesAnalyticsV38(realtimePayments, {
-                ownerId: vendorId,
-                eventId,
-                days
-            });
+            const realtimePayments = window.mergeVendorScopedPaymentsV39();
+            let analytics = window.buildVendorRealtimeSalesAnalyticsV39(realtimePayments, { ownerId: vendorId, eventId, days });
+            let source = analytics.orders > 0 ? 'transaksi realtime' : '';
 
-            if (!analytics.orders && !Object.keys(realtimePayments).length && typeof window.loadAggregatedSalesAnalytics === 'function') {
+            // Always allow the compact owner summary to recover legacy records or a
+            // listener that is still loading. This was too narrowly gated in v38.
+            if (!analytics.orders && typeof window.loadAggregatedSalesAnalytics === 'function') {
                 try {
-                    analytics = await window.loadAggregatedSalesAnalytics({ ownerId: vendorId, eventId, days });
+                    const aggregated = await window.loadAggregatedSalesAnalytics({ ownerId: vendorId, eventId, days });
+                    if (aggregated?.orders > 0 || aggregated?.revenue > 0) {
+                        analytics = aggregated;
+                        source = 'ringkasan realtime';
+                    }
                 } catch (error) {
-                    console.warn('[v38] Ringkasan analitik Vendor belum tersedia.', error);
+                    console.warn('[v39] Ringkasan analitik Vendor belum tersedia.', error);
                 }
             }
 
+            const state = window.__vendorSalesRealtimeV39;
+            state.lastSource = source || 'belum ada transaksi pada periode terpilih';
             const subtitle = document.getElementById('sales-analytics-scope');
-            if (subtitle) subtitle.textContent = 'Realtime • hanya transaksi APPROVED untuk event milik akun Vendor Anda.';
-            window.updateSalesAnalyticsKpis('sales', analytics);
-            window.renderSalesAnalyticsCharts('sales', analytics);
+            if (subtitle) subtitle.textContent = `Realtime v39 • ${state.lastSource} • hanya transaksi APPROVED milik Vendor Anda.`;
+            window.updateSalesAnalyticsKpis?.('sales', analytics);
+            window.renderVendorSalesChartsVisibleV39(analytics);
             return analytics;
         };
 
-        const originalSwitchAdminTabV38 = window.switchAdminTab;
+        const originalSwitchAdminTabV39 = window.switchAdminTab;
         window.switchAdminTab = function(tabName) {
-            const result = typeof originalSwitchAdminTabV38 === 'function'
-                ? originalSwitchAdminTabV38.apply(this, arguments)
+            const result = typeof originalSwitchAdminTabV39 === 'function'
+                ? originalSwitchAdminTabV39.apply(this, arguments)
                 : undefined;
             if (tabName === 'dashboard' && window.isVendor) {
-                window.startVendorSalesRealtimeV38();
-                setTimeout(() => window.renderMainSalesAnalytics?.(), 80);
-                setTimeout(() => window.renderMainSalesAnalytics?.(), 260);
+                window.startVendorSalesRealtimeV39();
+                [70, 260, 650].forEach(delay => setTimeout(() => window.renderMainSalesAnalytics?.(), delay));
             }
             return result;
         };
 
-        const originalRefreshDashboardAfterDataMutationV38 = window.refreshDashboardAfterDataMutation;
+        const originalRefreshDashboardAfterDataMutationV39 = window.refreshDashboardAfterDataMutation;
         window.refreshDashboardAfterDataMutation = async function() {
-            const result = typeof originalRefreshDashboardAfterDataMutationV38 === 'function'
-                ? originalRefreshDashboardAfterDataMutationV38.apply(this, arguments)
+            const result = typeof originalRefreshDashboardAfterDataMutationV39 === 'function'
+                ? originalRefreshDashboardAfterDataMutationV39.apply(this, arguments)
                 : undefined;
             await Promise.resolve(result);
             if (window.isVendor) {
-                window.startVendorSalesRealtimeV38();
+                window.startVendorSalesRealtimeV39();
                 await Promise.resolve(window.renderMainSalesAnalytics?.());
             }
             return result;
@@ -11862,17 +12003,17 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
         window.auth?.onAuthStateChanged?.(user => {
             if (!user) {
-                window.stopVendorSalesRealtimeV38();
+                window.stopVendorSalesRealtimeV39();
                 return;
             }
             let attempts = 0;
             const startWhenReady = () => {
                 attempts += 1;
-                if (window.startVendorSalesRealtimeV38()) {
+                if (window.startVendorSalesRealtimeV39()) {
                     window.renderMainSalesAnalytics?.();
                     return;
                 }
-                if (attempts < 12) setTimeout(startWhenReady, 350);
+                if (attempts < 16) setTimeout(startWhenReady, 350);
             };
             setTimeout(startWhenReady, 120);
         });
