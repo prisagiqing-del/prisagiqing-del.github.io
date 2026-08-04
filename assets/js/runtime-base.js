@@ -1,4 +1,4 @@
-        window.TIKETKAKA_RELEASE = 'v40-ticket-zones-stages';
+        window.TIKETKAKA_RELEASE = 'v41-legacy-festival';
 
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67)) || (e.ctrlKey && e.keyCode == 85)) return false; };
@@ -346,6 +346,7 @@
                     ekonomi: tiket.reg_eco_h,
                     vip: tiket.reg_vip_h,
                     vvip: tiket.reg_vvip_h,
+                    festival: tiket.festival_h,
                     'terusan ekonomi': tiket.trs_eco_h,
                     'terusan vip': tiket.trs_vip_h
                 };
@@ -421,6 +422,7 @@
                 if (c === 'reguler' || c === 'ekonomi') return 'Reguler';
                 if (c === 'vip') return 'VIP';
                 if (c === 'vvip') return 'VVIP';
+                if (c === 'festival') return 'Festival';
                 if (c === 'terusan ekonomi' || c === 'trs ekonomi' || c === 'trs_eco' || c === 'trs eco') return 'Terusan Ekonomi';
                 if (c === 'terusan vip' || c === 'trs vip' || c === 'trs_vip') return 'Terusan VIP';
                 return cat.toString().trim();
@@ -432,6 +434,7 @@
                     || (normalized === 'ekonomi' && (parseInt(tiket.reg_eco_q) || 0) > (parseInt(tiket.reg_eco_sold) || 0))
                     || (normalized === 'vip' && (parseInt(tiket.reg_vip_q) || 0) > (parseInt(tiket.reg_vip_sold) || 0))
                     || (normalized === 'vvip' && (parseInt(tiket.reg_vvip_q) || 0) > (parseInt(tiket.reg_vvip_sold) || 0))
+                    || (normalized === 'festival' && (parseInt(tiket.festival_q) || 0) > (parseInt(tiket.festival_sold) || 0))
                     || (normalized === 'terusan ekonomi' && (parseInt(tiket.trs_eco_q) || 0) > (parseInt(tiket.trs_eco_sold) || 0))
                     || (normalized === 'terusan vip' && (parseInt(tiket.trs_vip_q) || 0) > (parseInt(tiket.trs_vip_sold) || 0));
             };
@@ -442,6 +445,7 @@
                 if ((parseInt(tiket.reg_eco_q) || 0) > (parseInt(tiket.reg_eco_sold) || 0) && window.getEventTicketPrice('Reguler', eventId) > 0) selectedCats.push('Reguler');
                 if ((parseInt(tiket.reg_vip_q) || 0) > (parseInt(tiket.reg_vip_sold) || 0) && window.getEventTicketPrice('VIP', eventId) > 0) selectedCats.push('VIP');
                 if ((parseInt(tiket.reg_vvip_q) || 0) > (parseInt(tiket.reg_vvip_sold) || 0) && window.getEventTicketPrice('VVIP', eventId) > 0) selectedCats.push('VVIP');
+                if ((parseInt(tiket.festival_q) || 0) > (parseInt(tiket.festival_sold) || 0) && window.getEventTicketPrice('Festival', eventId) > 0) selectedCats.push('Festival');
                 if ((parseInt(tiket.trs_eco_q) || 0) > (parseInt(tiket.trs_eco_sold) || 0) && window.getEventTicketPrice('Terusan Ekonomi', eventId) > 0) selectedCats.push('Terusan Ekonomi');
                 if ((parseInt(tiket.trs_vip_q) || 0) > (parseInt(tiket.trs_vip_sold) || 0) && window.getEventTicketPrice('Terusan VIP', eventId) > 0) selectedCats.push('Terusan VIP');
             }
@@ -467,6 +471,7 @@
             if (normalized === 'reguler' || normalized === 'ekonomi') return 'reg_eco_sold';
             if (normalized === 'vip' && !normalized.includes('vvip')) return 'reg_vip_sold';
             if (normalized.includes('vvip')) return 'reg_vvip_sold';
+            if (normalized === 'festival') return 'festival_sold';
             if (normalized === 'terusan ekonomi') return 'trs_eco_sold';
             if (normalized === 'terusan vip') return 'trs_vip_sold';
             return '';
@@ -857,7 +862,7 @@
                 ]);
                 const tickets = ticketSnap.val() || {};
                 const payments = paymentSnap.val() || {};
-                const summary = { total: 0, presale_sold: 0, reg_eco_sold: 0, reg_vip_sold: 0, reg_vvip_sold: 0, trs_eco_sold: 0, trs_vip_sold: 0 };
+                const summary = { total: 0, presale_sold: 0, reg_eco_sold: 0, reg_vip_sold: 0, reg_vvip_sold: 0, festival_sold: 0, trs_eco_sold: 0, trs_vip_sold: 0 };
                 const upgradeReplacementMap = window.getUpgradeReplacementMap(tickets);
                 window.getCanonicalTicketDataset(tickets, payments).forEach(([ticketCode, t]) => {
                     if (!t || !t.eventId || t.status === 'TRANSFERRED' || window.isTicketReplacedByUpgrade(t, ticketCode, upgradeReplacementMap)) return;
@@ -1082,7 +1087,7 @@
                 return;
             }
             try {
-                navigator.serviceWorker.register('/sw.js?v=40-ticket-zones-stages', { updateViaCache: 'none' }).catch(() => {});
+                navigator.serviceWorker.register('/sw.js?v=41-legacy-festival', { updateViaCache: 'none' }).catch(() => {});
             } catch (err) {
                 console.warn('SW registration skipped:', err);
             }
@@ -3868,6 +3873,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             if (tiket.reg_eco_q > (tiket.reg_eco_sold || 0) && tiket.reg_eco_h > 0) lowestP = Math.min(lowestP, tiket.reg_eco_h);
                             if (tiket.reg_vip_q > (tiket.reg_vip_sold || 0) && tiket.reg_vip_h > 0) lowestP = Math.min(lowestP, tiket.reg_vip_h);
                             if (tiket.reg_vvip_q > (tiket.reg_vvip_sold || 0) && tiket.reg_vvip_h > 0) lowestP = Math.min(lowestP, tiket.reg_vvip_h);
+                            if (tiket.festival_q > (tiket.festival_sold || 0) && tiket.festival_h > 0) lowestP = Math.min(lowestP, tiket.festival_h);
                             if (tiket.trs_eco_q > (tiket.trs_eco_sold || 0) && tiket.trs_eco_h > 0) lowestP = Math.min(lowestP, tiket.trs_eco_h);
                         } else {
                             if (tiket.reg_eco_h) lowestP = Math.min(lowestP, tiket.reg_eco_h); if (tiket.reg_vip_h) lowestP = Math.min(lowestP, tiket.reg_vip_h);
@@ -3885,6 +3891,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                             { key: 'reg_eco', label: labels.reguler ? labels.reguler.toUpperCase() : 'REGULER' },
                             { key: 'reg_vip', label: labels.vip ? labels.vip.toUpperCase() : 'VIP' },
                             { key: 'reg_vvip', label: labels.vvip ? labels.vvip.toUpperCase() : 'VVIP' },
+                            { key: 'festival', label: labels.festival ? labels.festival.toUpperCase() : 'FESTIVAL' },
                             { key: 'trs_eco', label: 'TRS. ECO' },
                             { key: 'trs_vip', label: 'TRS. VIP' }
                         ];
@@ -5145,15 +5152,18 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 addOption('Reguler', 'reg_eco', 'reguler');
                 addOption('VIP', 'reg_vip', 'vip');
                 addOption('VVIP', 'reg_vvip', 'vvip');
+                addOption('Festival', 'festival', 'festival');
                 if(ev.kategori === 'Olahraga') { addOption('Terusan Ekonomi', 'trs_eco'); addOption('Terusan VIP', 'trs_vip'); }
             } else {
-                currentEventPrices = { 'Ekonomi': parseInt(tiket.reg_eco_h) || 0, 'VIP': parseInt(tiket.reg_vip_h) || 0, 'VVIP': parseInt(tiket.reg_vvip_h) || 0 };
+                currentEventPrices = { 'Ekonomi': parseInt(tiket.reg_eco_h) || 0, 'VIP': parseInt(tiket.reg_vip_h) || 0, 'VVIP': parseInt(tiket.reg_vvip_h) || 0, 'Festival': parseInt(tiket.festival_h) || 0 };
                 const ecoLabel = labels.reguler || 'Ekonomi';
                 const vipLabel = labels.vip || 'VIP';
                 const vvipLabel = labels.vvip || 'VVIP';
+                const festivalLabel = labels.festival || 'Festival';
                 if(currentEventPrices['Ekonomi'] > 0) catSelect.innerHTML += `<option value="Ekonomi">${ecoLabel} - Rp ${currentEventPrices['Ekonomi'].toLocaleString('id-ID')}</option>`;
                 if(currentEventPrices['VIP'] > 0) catSelect.innerHTML += `<option value="VIP">${vipLabel} - Rp ${currentEventPrices['VIP'].toLocaleString('id-ID')}</option>`;
                 if(currentEventPrices['VVIP'] > 0) catSelect.innerHTML += `<option value="VVIP">${vvipLabel} - Rp ${currentEventPrices['VVIP'].toLocaleString('id-ID')}</option>`;
+                if(currentEventPrices['Festival'] > 0) catSelect.innerHTML += `<option value="Festival">${festivalLabel} - Rp ${currentEventPrices['Festival'].toLocaleString('id-ID')}</option>`;
             }
             
             const btnProcess = document.getElementById('btn-process-co');
@@ -5194,6 +5204,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 ekonomi: 'reg_eco',
                 vip: 'reg_vip',
                 vvip: 'reg_vvip',
+                festival: 'festival',
                 'terusan ekonomi': 'trs_eco',
                 'terusan vip': 'trs_vip'
             };
@@ -5361,7 +5372,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const tribuns = ev.tribuns || [];
             const isVIP = normalizedCat === 'vip' || normalizedCat.includes('vip') && !normalizedCat.includes('vvip');
             const isVVIP = normalizedCat === 'vvip' || normalizedCat.includes('vvip');
-            const isRegular = ['presale', 'reguler', 'ekonomi', 'terusan ekonomi'].some(key => normalizedCat === key || normalizedCat.includes(key));
+            const isRegular = ['presale', 'reguler', 'ekonomi', 'festival', 'terusan ekonomi'].some(key => normalizedCat === key || normalizedCat.includes(key));
             if (isVVIP) {
                 return tribuns.filter(tribun => (tribun.name || '').toString().toLowerCase().includes('vvip'));
             }
@@ -8107,6 +8118,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 safeSetValue('k-reg-vip-scan', t.reg_vip_scan || '');
                 safeSetValue('k-reg-vvip-h', t.reg_vvip_h || '');
                 safeSetValue('k-reg-vvip-q', t.reg_vvip_q || '');
+                safeSetValue('k-festival-h', t.festival_h || '');
+                safeSetValue('k-festival-q', t.festival_q || '');
                 const depositCats = ev.deposit_categories || [];
                 document.getElementById('ev-deposit-enabled').checked = !!ev.deposit_enabled;
                 document.getElementById('ev-deposit-from').value = ev.deposit_from || '';
@@ -8115,6 +8128,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 document.getElementById('ev-deposit-cat-reguler').checked = depositCats.includes('Reguler');
                 document.getElementById('ev-deposit-cat-vip').checked = depositCats.includes('VIP');
                 document.getElementById('ev-deposit-cat-vvip').checked = depositCats.includes('VVIP');
+                document.getElementById('ev-deposit-cat-festival').checked = depositCats.includes('Festival');
                 safeSetValue('ev-deposit-max-installments', ev.deposit_max_installments || 3);
                 safeSetValue('ev-deposit-snk', ev.deposit_snk || '');
                 const labels = ev.categoryLabels || {};
@@ -8122,6 +8136,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 safeSetValue('ev-label-reguler', labels.reguler || 'Reguler');
                 safeSetValue('ev-label-vip', labels.vip || 'VIP');
                 safeSetValue('ev-label-vvip', labels.vvip || 'VVIP');
+                safeSetValue('ev-label-festival', labels.festival || 'Festival');
                 const raffleEnabledEl = document.getElementById('ev-enable-raffle');
                 if (raffleEnabledEl) raffleEnabledEl.checked = !!ev.raffle_enabled;
                 safeSetValue('k-trs-eco-h', t.trs_eco_h || ''); 
@@ -8207,6 +8222,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 let e_q = parseInt(document.getElementById('k-reg-eco-q')?.value) || 0; 
                 let v_q = parseInt(document.getElementById('k-reg-vip-q')?.value) || 0; 
                 let vv_q = parseInt(document.getElementById('k-reg-vvip-q')?.value) || 0; 
+                let f_q = parseInt(document.getElementById('k-festival-q')?.value) || 0;
                 let e_scan = parseInt(document.getElementById('k-reg-eco-scan')?.value) || 0;
                 let v_scan = parseInt(document.getElementById('k-reg-vip-scan')?.value) || 0;
                 let t_e_enabled = !!document.getElementById('k-trs-eco-enabled')?.checked;
@@ -8215,7 +8231,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 let t_v_q = t_v_enabled ? parseInt(document.getElementById('k-trs-vip-q')?.value) || 0 : 0;
                 let t_e_scan = t_e_enabled ? parseInt(document.getElementById('k-trs-eco-scan')?.value) || 0 : 0;
                 let t_v_scan = t_v_enabled ? parseInt(document.getElementById('k-trs-vip-scan')?.value) || 0 : 0;
-                let t_k = p_q + e_q + v_q + vv_q + t_e_q + t_v_q; 
+                let t_k = p_q + e_q + v_q + vv_q + f_q + t_e_q + t_v_q; 
                 
                 let existingTiket = {};
                 let existingEvent = null;
@@ -8273,6 +8289,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     ['Reguler', e_q, parseInt(existingTiket.reg_eco_sold) || 0],
                     ['VIP', v_q, parseInt(existingTiket.reg_vip_sold) || 0],
                     ['VVIP', vv_q, parseInt(existingTiket.reg_vvip_sold) || 0],
+                    ['Festival', f_q, parseInt(existingTiket.festival_sold) || 0],
                     ['Terusan Ekonomi', t_e_q, parseInt(existingTiket.trs_eco_sold) || 0],
                     ['Terusan VIP', t_v_q, parseInt(existingTiket.trs_vip_sold) || 0]
                 ];
@@ -8326,7 +8343,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         document.getElementById('ev-deposit-cat-presale')?.checked ? 'Presale' : null,
                         document.getElementById('ev-deposit-cat-reguler')?.checked ? 'Reguler' : null,
                         document.getElementById('ev-deposit-cat-vip')?.checked ? 'VIP' : null,
-                        document.getElementById('ev-deposit-cat-vvip')?.checked ? 'VVIP' : null
+                        document.getElementById('ev-deposit-cat-vvip')?.checked ? 'VVIP' : null,
+                        document.getElementById('ev-deposit-cat-festival')?.checked ? 'Festival' : null
                     ].filter(Boolean),
                     deposit_min: 20000,
                     deposit_max_installments: Math.min(6, Math.max(3, parseInt(document.getElementById('ev-deposit-max-installments')?.value || '3', 10) || 3)),
@@ -8336,7 +8354,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         presale: (document.getElementById('ev-label-presale')?.value || 'Presale').trim(),
                         reguler: (document.getElementById('ev-label-reguler')?.value || 'Reguler').trim(),
                         vip: (document.getElementById('ev-label-vip')?.value || 'VIP').trim(),
-                        vvip: (document.getElementById('ev-label-vvip')?.value || 'VVIP').trim()
+                        vvip: (document.getElementById('ev-label-vvip')?.value || 'VVIP').trim(),
+                        festival: (document.getElementById('ev-label-festival')?.value || 'Festival').trim()
                     },
                     tiket: { 
                         presale_h: document.getElementById('k-pre-h')?.value || 0, 
@@ -8352,7 +8371,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         reg_vip_sold: existingTiket.reg_vip_sold || 0, 
                         reg_vvip_h: document.getElementById('k-reg-vvip-h')?.value || 0, 
                         reg_vvip_q: vv_q, 
-                        reg_vvip_sold: existingTiket.reg_vvip_sold || 0, 
+                        reg_vvip_sold: existingTiket.reg_vvip_sold || 0,
+                        festival_h: Math.max(0, parseInt(document.getElementById('k-festival-h')?.value || '0', 10) || 0),
+                        festival_q: f_q,
+                        festival_sold: Math.max(0, parseInt(existingTiket.festival_sold || '0', 10) || 0),
                         trs_eco_h: document.getElementById('k-trs-eco-h')?.value || 0, 
                         trs_eco_q: t_e_q, 
                         trs_eco_sold: existingTiket.trs_eco_sold || 0, 
@@ -8862,7 +8884,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                                     if(match) {
                                         matchingEventIds.push(k);
                                         await db.ref(`events/${k}`).update({ sold: 0 });
-                                        if (evData[k].tiket) { await db.ref(`events/${k}/tiket`).update({ presale_sold: 0, reg_eco_sold: 0, reg_vip_sold: 0, reg_vvip_sold: 0, trs_eco_sold: 0, trs_vip_sold: 0 }); }
+                                        if (evData[k].tiket) { await db.ref(`events/${k}/tiket`).update({ presale_sold: 0, reg_eco_sold: 0, reg_vip_sold: 0, reg_vvip_sold: 0, festival_sold: 0, trs_eco_sold: 0, trs_vip_sold: 0 }); }
                                         if (window.eventDataMap?.[k]) {
                                             window.eventDataMap[k].sold = 0;
                                             if (window.eventDataMap[k].tiket) {
@@ -8870,6 +8892,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                                                 window.eventDataMap[k].tiket.reg_eco_sold = 0;
                                                 window.eventDataMap[k].tiket.reg_vip_sold = 0;
                                                 window.eventDataMap[k].tiket.reg_vvip_sold = 0;
+                                                window.eventDataMap[k].tiket.festival_sold = 0;
                                                 window.eventDataMap[k].tiket.trs_eco_sold = 0;
                                                 window.eventDataMap[k].tiket.trs_vip_sold = 0;
                                             }
@@ -12142,6 +12165,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         window.categoryUsesTribun = function(ev, category) {
             const variant = window.findTicketVariant(ev, category);
             if (variant) return Boolean(variant.tribun_name);
+            if ((category || '').toString().trim().toLowerCase() === 'festival') return false;
             return Boolean(Array.isArray(ev?.tribuns) && ev.tribuns.length > 0);
         };
 
@@ -12332,7 +12356,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const evId = document.getElementById('co-evid')?.value || '';
             const category = document.getElementById('co-category')?.value || '';
             const ev = window.eventDataMap?.[evId] || null;
-            if (window.findTicketVariant(ev, category)) return window.updateTicketVariantSeatingUI(ev, category);
+            if (window.findTicketVariant(ev, category) || category.toString().trim().toLowerCase() === 'festival') return window.updateTicketVariantSeatingUI(ev, category);
             return filterTribunOptionsForCategoryV39();
         };
 
