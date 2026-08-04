@@ -1,4 +1,4 @@
-        window.TIKETKAKA_RELEASE = 'v37-purchase-qty-6';
+        window.TIKETKAKA_RELEASE = 'v38-vendor-realtime-sales';
 
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67)) || (e.ctrlKey && e.keyCode == 85)) return false; };
@@ -1076,7 +1076,7 @@
                 return;
             }
             try {
-                navigator.serviceWorker.register('/sw.js?v=37-purchase-qty-6', { updateViaCache: 'none' }).catch(() => {});
+                navigator.serviceWorker.register('/sw.js?v=38-vendor-realtime-sales', { updateViaCache: 'none' }).catch(() => {});
             } catch (err) {
                 console.warn('SW registration skipped:', err);
             }
@@ -11648,3 +11648,231 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 });
             } catch (error) {}
         })();
+        // Tiket Kaka v38: realtime sales charts for each Vendor dashboard.
+        window.__vendorSalesRealtimeV38 = window.__vendorSalesRealtimeV38 || {
+            uid: '',
+            query: null,
+            callback: null,
+            errorCallback: null,
+            payments: {},
+            loaded: false
+        };
+
+        window.stopVendorSalesRealtimeV38 = function() {
+            const state = window.__vendorSalesRealtimeV38 || {};
+            if (state.query && state.callback) {
+                try { state.query.off('value', state.callback); } catch (error) {}
+            }
+            state.uid = '';
+            state.query = null;
+            state.callback = null;
+            state.errorCallback = null;
+            state.payments = {};
+            state.loaded = false;
+        };
+
+        window.buildVendorRealtimeSalesAnalyticsV38 = function(paymentsData, { ownerId = '', eventId = 'ALL', days = 30 } = {}) {
+            const now = Date.now();
+            const normalizedDays = Math.max(1, Math.min(90, Number(days || 30)));
+            const startDate = new Date(now);
+            startDate.setHours(0, 0, 0, 0);
+            startDate.setDate(startDate.getDate() - (normalizedDays - 1));
+            const startAt = startDate.getTime();
+            const events = window.eventDataMap || {};
+            const dateBuckets = {};
+            const hourBuckets = Array.from({ length: 24 }, () => 0);
+            const eventBuckets = {};
+            const buyers = new Set();
+            let revenue = 0;
+            let orders = 0;
+
+            Object.entries(paymentsData || {}).forEach(([paymentId, payment]) => {
+                if (!payment) return;
+                const status = String(payment.status || '').toUpperCase();
+                if (status !== 'APPROVED') return;
+                const paymentOwnerId = window.getSalesAnalyticsOwnerId?.(payment) || payment.ownerId || '';
+                if (ownerId && paymentOwnerId !== ownerId) return;
+                const paymentEventId = String(payment.eventId || '');
+                if (!paymentEventId) return;
+                if (eventId !== 'ALL' && paymentEventId !== eventId) return;
+                const timestamp = window.getSalesAnalyticsTimestamp?.(payment) || Number(payment.createdAt || payment.approvedAt || 0);
+                if (!timestamp || timestamp < startAt || timestamp > now + 60000) return;
+                const amount = Math.max(0, Number(payment.total || payment.depositAmount || 0) || 0);
+                if (amount <= 0) return;
+
+                const dateKey = window.getAnalyticsDateKey(timestamp);
+                const hour = new Date(timestamp).getHours();
+                const eventName = String(events[paymentEventId]?.title || payment.eventName || 'Event');
+                revenue += amount;
+                orders += 1;
+                if (payment.uid) buyers.add(payment.uid);
+                dateBuckets[dateKey] = dateBuckets[dateKey] || { orders: 0, revenue: 0 };
+                dateBuckets[dateKey].orders += 1;
+                dateBuckets[dateKey].revenue += amount;
+                hourBuckets[hour] += 1;
+                eventBuckets[paymentEventId] = eventBuckets[paymentEventId] || {
+                    eventId: paymentEventId,
+                    eventName,
+                    orders: 0,
+                    revenue: 0
+                };
+                eventBuckets[paymentEventId].orders += 1;
+                eventBuckets[paymentEventId].revenue += amount;
+            });
+
+            const daily = [];
+            for (let offset = normalizedDays - 1; offset >= 0; offset--) {
+                const date = new Date(now);
+                date.setHours(12, 0, 0, 0);
+                date.setDate(date.getDate() - offset);
+                const key = window.getAnalyticsDateKey(date.getTime());
+                const bucket = dateBuckets[key] || { orders: 0, revenue: 0 };
+                daily.push({
+                    key,
+                    label: window.formatAnalyticsDate(key),
+                    orders: bucket.orders,
+                    revenue: bucket.revenue
+                });
+            }
+            const hourly = hourBuckets.map((count, hour) => ({
+                hour,
+                label: `${String(hour).padStart(2, '0')}:00`,
+                orders: count
+            }));
+            const byEvent = Object.values(eventBuckets)
+                .sort((a, b) => b.revenue - a.revenue || b.orders - a.orders)
+                .slice(0, 8);
+            const peakDate = Object.entries(dateBuckets)
+                .sort((a, b) => b[1].orders - a[1].orders || b[1].revenue - a[1].revenue)[0] || null;
+            const peakHour = hourly.slice()
+                .sort((a, b) => b.orders - a.orders || a.hour - b.hour)[0] || null;
+
+            return {
+                revenue,
+                orders,
+                buyers: buyers.size,
+                daily,
+                hourly,
+                byEvent,
+                peakDate,
+                peakHour
+            };
+        };
+
+        window.startVendorSalesRealtimeV38 = function() {
+            if (!window.db || !window.isVendor || !window.currentUserData?.uid) return false;
+            const vendorId = window.currentUserData.uid;
+            const state = window.__vendorSalesRealtimeV38;
+            if (state.uid === vendorId && state.query && state.callback) return true;
+            window.stopVendorSalesRealtimeV38();
+
+            const query = db.ref('payments')
+                .orderByChild('ownerId')
+                .equalTo(vendorId)
+                .limitToLast(window.ADMIN_PENDING_QUERY_LIMIT || 5000);
+            const callback = snapshot => {
+                if (!window.isVendor || window.currentUserData?.uid !== vendorId) return;
+                state.payments = snapshot.val() || {};
+                state.loaded = true;
+                state.uid = vendorId;
+                clearTimeout(window.__vendorSalesRealtimeRenderTimerV38);
+                window.__vendorSalesRealtimeRenderTimerV38 = setTimeout(() => {
+                    requestAnimationFrame(() => {
+                        window.renderMainSalesAnalytics?.();
+                    });
+                }, 40);
+            };
+            const errorCallback = error => {
+                state.loaded = false;
+                console.warn('[v38] Listener grafik penjualan Vendor gagal; memakai cache pembayaran dashboard.', error);
+                window.scheduleSalesAnalyticsRender?.(60);
+            };
+            state.uid = vendorId;
+            state.query = query;
+            state.callback = callback;
+            state.errorCallback = errorCallback;
+            query.on('value', callback, errorCallback);
+            return true;
+        };
+
+        const originalRenderMainSalesAnalyticsV38 = window.renderMainSalesAnalytics;
+        window.renderMainSalesAnalytics = async function() {
+            if (!window.isVendor) {
+                return typeof originalRenderMainSalesAnalyticsV38 === 'function'
+                    ? originalRenderMainSalesAnalyticsV38.apply(this, arguments)
+                    : undefined;
+            }
+            if (!document.getElementById('sales-analytics-panel') || !window.currentUserData?.uid) return;
+            window.populateMainSalesAnalyticsFilters?.();
+            window.startVendorSalesRealtimeV38();
+
+            const vendorId = window.currentUserData.uid;
+            const eventId = document.getElementById('sales-analytics-event-filter')?.value || 'ALL';
+            const days = Number(document.getElementById('sales-analytics-period-filter')?.value || 30);
+            const realtimeState = window.__vendorSalesRealtimeV38 || {};
+            const realtimePayments = realtimeState.uid === vendorId && realtimeState.loaded
+                ? (realtimeState.payments || {})
+                : (window.globalPaymentsData || {});
+            let analytics = window.buildVendorRealtimeSalesAnalyticsV38(realtimePayments, {
+                ownerId: vendorId,
+                eventId,
+                days
+            });
+
+            if (!analytics.orders && !Object.keys(realtimePayments).length && typeof window.loadAggregatedSalesAnalytics === 'function') {
+                try {
+                    analytics = await window.loadAggregatedSalesAnalytics({ ownerId: vendorId, eventId, days });
+                } catch (error) {
+                    console.warn('[v38] Ringkasan analitik Vendor belum tersedia.', error);
+                }
+            }
+
+            const subtitle = document.getElementById('sales-analytics-scope');
+            if (subtitle) subtitle.textContent = 'Realtime • hanya transaksi APPROVED untuk event milik akun Vendor Anda.';
+            window.updateSalesAnalyticsKpis('sales', analytics);
+            window.renderSalesAnalyticsCharts('sales', analytics);
+            return analytics;
+        };
+
+        const originalSwitchAdminTabV38 = window.switchAdminTab;
+        window.switchAdminTab = function(tabName) {
+            const result = typeof originalSwitchAdminTabV38 === 'function'
+                ? originalSwitchAdminTabV38.apply(this, arguments)
+                : undefined;
+            if (tabName === 'dashboard' && window.isVendor) {
+                window.startVendorSalesRealtimeV38();
+                setTimeout(() => window.renderMainSalesAnalytics?.(), 80);
+                setTimeout(() => window.renderMainSalesAnalytics?.(), 260);
+            }
+            return result;
+        };
+
+        const originalRefreshDashboardAfterDataMutationV38 = window.refreshDashboardAfterDataMutation;
+        window.refreshDashboardAfterDataMutation = async function() {
+            const result = typeof originalRefreshDashboardAfterDataMutationV38 === 'function'
+                ? originalRefreshDashboardAfterDataMutationV38.apply(this, arguments)
+                : undefined;
+            await Promise.resolve(result);
+            if (window.isVendor) {
+                window.startVendorSalesRealtimeV38();
+                await Promise.resolve(window.renderMainSalesAnalytics?.());
+            }
+            return result;
+        };
+
+        window.auth?.onAuthStateChanged?.(user => {
+            if (!user) {
+                window.stopVendorSalesRealtimeV38();
+                return;
+            }
+            let attempts = 0;
+            const startWhenReady = () => {
+                attempts += 1;
+                if (window.startVendorSalesRealtimeV38()) {
+                    window.renderMainSalesAnalytics?.();
+                    return;
+                }
+                if (attempts < 12) setTimeout(startWhenReady, 350);
+            };
+            setTimeout(startWhenReady, 120);
+        });
