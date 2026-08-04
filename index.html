@@ -289,10 +289,14 @@
                             <label class="text-xs text-gray-400 block mb-2 font-bold tracking-wider uppercase">1. Pilih Kategori</label>
                             <select id="co-category" class="w-full bg-darker border border-gray-600 rounded-xl p-4 text-white mb-5 outline-none focus:border-amber-500 cursor-pointer font-medium" onchange="calcTotal(); window.filterTribunOptionsForCategory();"></select>
 
-                            <label class="text-xs text-gray-400 block mb-2 font-bold tracking-wider uppercase">2. Jumlah (Maks 2)</label>
+                            <label class="text-xs text-gray-400 block mb-2 font-bold tracking-wider uppercase">2. Jumlah (Maks 6)</label>
                             <select id="co-qty" class="w-full bg-darker border border-gray-600 rounded-xl p-4 text-white mb-6 outline-none focus:border-amber-500 cursor-pointer font-medium" onchange="calcTotal()">
                                 <option value="1">1 Tiket</option>
                                 <option value="2">2 Tiket</option>
+                                <option value="3">3 Tiket</option>
+                                <option value="4">4 Tiket</option>
+                                <option value="5">5 Tiket</option>
+                                <option value="6">6 Tiket</option>
                             </select>
 
                             <div class="tk-total-box flex justify-between items-center mb-6 p-5 rounded-xl">
@@ -1741,7 +1745,7 @@
 
 
 
-    <script src="./assets/js/runtime-base.js?v=36-transfer-lock"></script>
+    <script src="./assets/js/runtime-base.js?v=37-purchase-qty-6"></script>
 	<script src="./assets/js/report-pdf-overrides.js"></script>
 <script src="./assets/js/buyer-report-overrides.js"></script>
 <!-- Extension: Editable Category Labels per Event -->

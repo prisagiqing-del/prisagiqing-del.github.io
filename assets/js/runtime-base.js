@@ -1,4 +1,4 @@
-        window.TIKETKAKA_RELEASE = 'v36-transfer-lock';
+        window.TIKETKAKA_RELEASE = 'v37-purchase-qty-6';
 
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67)) || (e.ctrlKey && e.keyCode == 85)) return false; };
@@ -1076,7 +1076,7 @@
                 return;
             }
             try {
-                navigator.serviceWorker.register('/sw.js?v=35-transfer-final', { updateViaCache: 'none' }).catch(() => {});
+                navigator.serviceWorker.register('/sw.js?v=37-purchase-qty-6', { updateViaCache: 'none' }).catch(() => {});
             } catch (err) {
                 console.warn('SW registration skipped:', err);
             }
@@ -5098,6 +5098,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if (vSpContainer) vSpContainer.classList.add('hidden');
 
             document.getElementById('co-evid').value = evId; document.getElementById('co-title').value = ev.title || 'Event'; document.getElementById('co-date').value = ev.date || '-'; document.getElementById('co-time').value = ev.time || '-';
+            const checkoutQtySelect = document.getElementById('co-qty');
+            if (checkoutQtySelect) checkoutQtySelect.value = '1';
             window.displayEventCustomForm(ev);
             if (ev.ownerId && ev.ownerId !== 'SUPER_ADMIN') {
                 window.recordVendorVisitor(ev.ownerId);
@@ -5158,6 +5160,26 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             
             showPage('event-detail');
         }
+
+        window.getEventRemainingTicketQuantity = function(ev, category) {
+            if (!ev || !ev.tiket) return Number.POSITIVE_INFINITY;
+            const tiket = ev.tiket || {};
+            const normalized = (category || '').toString().trim().toLowerCase();
+            const codeMap = {
+                presale: 'presale',
+                reguler: 'reg_eco',
+                ekonomi: 'reg_eco',
+                vip: 'reg_vip',
+                vvip: 'reg_vvip',
+                'terusan ekonomi': 'trs_eco',
+                'terusan vip': 'trs_vip'
+            };
+            const code = codeMap[normalized];
+            if (!code || tiket[`${code}_q`] === undefined) return Number.POSITIVE_INFINITY;
+            const quota = Math.max(0, parseInt(tiket[`${code}_q`], 10) || 0);
+            const sold = Math.max(0, parseInt(tiket[`${code}_sold`], 10) || 0);
+            return Math.max(0, quota - sold);
+        };
 
         window.calcTotal = function() {
             const cat = document.getElementById('co-category').value; const qty = parseInt(document.getElementById('co-qty').value) || 1;
@@ -5428,7 +5450,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const cat = catEl.value; 
             const qty = parseInt(qtyEl.value);
 
-            if (qty < 1) { btn.disabled = false; btn.innerHTML = "Checkout Pembayaran"; return Swal.fire({icon:'error', title:'Akses Ditolak', text:'Minimal harus membeli 1 tiket!', background:'#1e293b', color:'#fff'}); }
+            if (!Number.isInteger(qty) || qty < 1 || qty > 6) { btn.disabled = false; btn.innerHTML = "Checkout Pembayaran"; return Swal.fire({icon:'error', title:'Jumlah Tiket Tidak Valid', text:'Jumlah pembelian harus antara 1 sampai 6 tiket.', background:'#1e293b', color:'#fff'}); }
             
             const price = window.getEventTicketPrice(cat, evId.value);
             const total = price * qty;
@@ -5451,6 +5473,12 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
                 const eventData = window.eventDataMap && window.eventDataMap[evId.value];
                 if (!eventData) { btn.disabled = false; btn.innerHTML = "Checkout Pembayaran"; return Swal.fire({icon:'error', title:'Event tidak ditemukan!', background:'#1e293b', color:'#fff'}); }
+                const remainingTicketQty = window.getEventRemainingTicketQuantity(eventData, cat);
+                if (Number.isFinite(remainingTicketQty) && qty > remainingTicketQty) {
+                    btn.disabled = false;
+                    btn.innerHTML = "Checkout Pembayaran";
+                    return Swal.fire({ icon:'warning', title:'Tiket Tidak Mencukupi', text:`Sisa tiket untuk kategori ini hanya ${remainingTicketQty}. Silakan kurangi jumlah pembelian.`, background:'#1e293b', color:'#fff' });
+                }
                 
                 // Check if tribun is required and selected
                 const hasTriBun = eventData.tribuns && eventData.tribuns.length > 0;
@@ -5926,7 +5954,12 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const amount = parseInt(depositAmountInput?.value || '0', 10) || 0;
             const unitPrice = window.getEventTicketPrice(category, evId);
             let price = unitPrice * qty;
+            if (!Number.isInteger(qty) || qty < 1 || qty > 6) { return Swal.fire({ icon:'warning', title:'Jumlah Tiket Tidak Valid', text:'Jumlah deposit harus antara 1 sampai 6 tiket.', background:'#1e293b', color:'#fff' }); }
             if (!category || amount <= 0) { return Swal.fire({ icon:'warning', title:'Deposit Tidak Valid', text:'Silakan pilih kategori deposit dan masukkan jumlah deposit yang valid.', background:'#1e293b', color:'#fff' }); }
+            const remainingDepositTicketQty = window.getEventRemainingTicketQuantity(eventData, category);
+            if (Number.isFinite(remainingDepositTicketQty) && qty > remainingDepositTicketQty) {
+                return Swal.fire({ icon:'warning', title:'Tiket Tidak Mencukupi', text:`Sisa tiket untuk kategori ini hanya ${remainingDepositTicketQty}. Silakan kurangi jumlah deposit tiket.`, background:'#1e293b', color:'#fff' });
+            }
             const prevTribunValue = document.getElementById('co-prev-tribun')?.value || '';
             const prevSeatValue = document.getElementById('co-prev-seat')?.value || '';
             const hasTriBun = eventData.tribuns && eventData.tribuns.length > 0;
