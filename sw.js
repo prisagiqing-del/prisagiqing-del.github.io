@@ -7,7 +7,7 @@
  */
 
 const CACHE_PREFIXES = ['btix-', 'tiketkaka-'];
-const CACHE_NAME = 'tiketkaka-v39-vendor-chart-repair';
+const CACHE_NAME = 'tiketkaka-v40-ticket-zones-stages';
 
 const APP_SHELL = [
   './',

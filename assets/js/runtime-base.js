@@ -1,4 +1,4 @@
-        window.TIKETKAKA_RELEASE = 'v39-vendor-chart-repair';
+        window.TIKETKAKA_RELEASE = 'v40-ticket-zones-stages';
 
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67)) || (e.ctrlKey && e.keyCode == 85)) return false; };
@@ -669,6 +669,9 @@
                         eventId: evId,
                         eventName: paymentData.eventName,
                         category,
+                        categoryKey: paymentData.categoryKey || undefined,
+                        ticketZone: paymentData.ticketZone || undefined,
+                        salesStage: paymentData.salesStage || undefined,
                         status: 'ACTIVE',
                         ownerId,
                         createdAt: Date.now() + serverOffset
@@ -769,6 +772,9 @@
                         eventId,
                         eventName: groupData.eventName,
                         category,
+                        categoryKey: groupData.categoryKey || undefined,
+                        ticketZone: groupData.ticketZone || undefined,
+                        salesStage: groupData.salesStage || undefined,
                         status: 'ACTIVE',
                         ownerId,
                         createdAt: Date.now() + serverOffset
@@ -1076,7 +1082,7 @@
                 return;
             }
             try {
-                navigator.serviceWorker.register('/sw.js?v=39-vendor-chart-repair', { updateViaCache: 'none' }).catch(() => {});
+                navigator.serviceWorker.register('/sw.js?v=40-ticket-zones-stages', { updateViaCache: 'none' }).catch(() => {});
             } catch (err) {
                 console.warn('SW registration skipped:', err);
             }
@@ -3866,6 +3872,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         } else {
                             if (tiket.reg_eco_h) lowestP = Math.min(lowestP, tiket.reg_eco_h); if (tiket.reg_vip_h) lowestP = Math.min(lowestP, tiket.reg_vip_h);
                         }
+                        window.getActiveEventTicketVariants?.(ev).forEach(variant => {
+                            if (variant.price > 0 && variant.quota > variant.sold) lowestP = Math.min(lowestP, variant.price);
+                        });
                         let ecoP = lowestP === Infinity ? (tiket.reg_eco_h || 0) : lowestP;
                         
                         let ticketInfoHtml = '<div class="grid grid-cols-2 gap-1.5 mb-3">';
@@ -3891,6 +3900,14 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                                 let sisaText = sisa > 0 ? `${sisa}/${q}` : 'HABIS';
                                 ticketInfoHtml += `<div class="flex justify-between items-center text-[9px] bg-dark/50 border ${statusColor} px-1.5 py-1 rounded"><span class="text-gray-300 font-bold truncate mr-1">${escapeHtml(cat.label)}</span><span class="font-black ${statusColor.split(' ')[0]} whitespace-nowrap">${sisaText}</span></div>`;
                             }
+                        });
+                        window.getActiveEventTicketVariants?.(ev).forEach(variant => {
+                            if (variant.quota <= 0) return;
+                            hasTickets = true;
+                            const remaining = Math.max(0, variant.quota - variant.sold);
+                            const statusColor = remaining > 0 ? 'text-green-400 border-green-500/30' : 'text-red-400 border-red-500/30';
+                            const remainingText = remaining > 0 ? `${remaining}/${variant.quota}` : 'HABIS';
+                            ticketInfoHtml += `<div class="flex justify-between items-center text-[9px] bg-dark/50 border ${statusColor} px-1.5 py-1 rounded"><span class="text-gray-300 font-bold truncate mr-1">${escapeHtml(variant.label.toUpperCase())}</span><span class="font-black ${statusColor.split(' ')[0]} whitespace-nowrap">${remainingText}</span></div>`;
                         });
                         ticketInfoHtml += '</div>';
                         if (!hasTickets) ticketInfoHtml = '';
@@ -4678,6 +4695,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     uid: p.uid || '',
                     eventId: p.eventId || '',
                     category: p.category || '',
+                    categoryKey: p.categoryKey || '',
+                    ticketZone: p.ticketZone || '',
+                    salesStage: p.salesStage || '',
                     ownerId: p.ownerId || 'SUPER_ADMIN',
                     userName: p.userName || '',
                     eventName: p.eventName || '',
@@ -4709,6 +4729,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 if (!group.selectedSeat && p.selectedSeat) group.selectedSeat = p.selectedSeat;
                 if (!group.userName && p.userName) group.userName = p.userName;
                 if (!group.eventName && p.eventName) group.eventName = p.eventName;
+                if (!group.categoryKey && p.categoryKey) group.categoryKey = p.categoryKey;
+                if (!group.ticketZone && p.ticketZone) group.ticketZone = p.ticketZone;
+                if (!group.salesStage && p.salesStage) group.salesStage = p.salesStage;
 
                 if (targetCandidate > 0 && (group.target <= 0 || createdAt < group.targetSourceAt)) {
                     group.target = targetCandidate;
@@ -5448,6 +5471,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             
             const title = titleEl.value;
             const cat = catEl.value; 
+            const selectedCategoryOption = catEl.options?.[catEl.selectedIndex] || null;
+            const categoryKey = selectedCategoryOption?.dataset?.categoryKey || window.getTicketVariantCategoryKey?.(window.eventDataMap?.[evId.value], cat) || '';
             const qty = parseInt(qtyEl.value);
 
             if (!Number.isInteger(qty) || qty < 1 || qty > 6) { btn.disabled = false; btn.innerHTML = "Checkout Pembayaran"; return Swal.fire({icon:'error', title:'Jumlah Tiket Tidak Valid', text:'Jumlah pembelian harus antara 1 sampai 6 tiket.', background:'#1e293b', color:'#fff'}); }
@@ -5481,7 +5506,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
                 
                 // Check if tribun is required and selected
-                const hasTriBun = eventData.tribuns && eventData.tribuns.length > 0;
+                const hasTriBun = window.categoryUsesTribun?.(eventData, cat) ?? (eventData.tribuns && eventData.tribuns.length > 0);
                 const useSeatNumber = eventData.tribun_use_seat_number !== false;
                 let selectedTribun = '';
                 let selectedSeat = '';
@@ -5544,6 +5569,12 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 const payKey = newPayRef.key;
                 
                 let payloadSet = { uid: user.uid, userName: uData.nama, eventId: evId.value, eventName: title, category: cat, total: total, qty: qty, status: 'PENDING', ownerId: eventOwnerId, type: 'CHECKOUT', createdAt: firebase.database.ServerValue.TIMESTAMP };
+                if (categoryKey) {
+                    const ticketVariant = window.findTicketVariant?.(eventData, categoryKey);
+                    payloadSet.categoryKey = categoryKey;
+                    payloadSet.ticketZone = ticketVariant?.zone || '';
+                    payloadSet.salesStage = ticketVariant?.stage || '';
+                }
                 if (hasTriBun) {
                     payloadSet.selectedTribun = selectedTribun;
                     payloadSet.selectedSeat = selectedSeat;
@@ -5884,7 +5915,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 depositCategory.value = existing.category;
                 category = existing.category;
             }
-            window.populateTribunOptionsForCategory(ev, category);
+            if (typeof window.updateTicketVariantSeatingUI === 'function') window.updateTicketVariantSeatingUI(ev, category);
+            else window.populateTribunOptionsForCategory(ev, category);
             if (!existing) existing = await window.getUserDepositSelection(evId, category, useSeatNumber);
             if (existing) {
                 planInput.value = existing.depositPlanId || '';
@@ -5950,6 +5982,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const depositAmountInput = document.getElementById('co-deposit-amount');
             const qtyEl = document.getElementById('co-qty');
             const category = depositCategory?.value || '';
+            const categoryKey = window.getTicketVariantCategoryKey?.(eventData, category) || '';
             const qty = parseInt(qtyEl?.value || '1', 10) || 1;
             const amount = parseInt(depositAmountInput?.value || '0', 10) || 0;
             const unitPrice = window.getEventTicketPrice(category, evId);
@@ -5962,7 +5995,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             }
             const prevTribunValue = document.getElementById('co-prev-tribun')?.value || '';
             const prevSeatValue = document.getElementById('co-prev-seat')?.value || '';
-            const hasTriBun = eventData.tribuns && eventData.tribuns.length > 0;
+            const hasTriBun = window.categoryUsesTribun?.(eventData, category) ?? (eventData.tribuns && eventData.tribuns.length > 0);
             const useSeatNumber = eventData.tribun_use_seat_number !== false;
             let selectedTribun = '';
             let selectedSeat = '';
@@ -6069,6 +6102,12 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     fullPrice: price,
                     createdAt: firebase.database.ServerValue.TIMESTAMP
                 };
+                if (categoryKey) {
+                    const ticketVariant = window.findTicketVariant?.(eventData, categoryKey);
+                    payloadSet.categoryKey = categoryKey;
+                    payloadSet.ticketZone = ticketVariant?.zone || '';
+                    payloadSet.salesStage = ticketVariant?.stage || '';
+                }
                 if (hasTriBun) { payloadSet.selectedTribun = selectedTribun; payloadSet.selectedSeat = selectedSeat; }
                 if (Object.keys(window.currentCustomFormAnswers || {}).length > 0) { payloadSet.customFormAnswers = window.currentCustomFormAnswers; }
                 await window.syncVendorCustomerRecord?.(ownerId, uData).catch(() => false);
@@ -6251,6 +6290,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 eventId,
                 eventName: pData.eventName || group.eventName,
                 category,
+                categoryKey: group.categoryKey || pData.categoryKey || '',
+                ticketZone: group.ticketZone || pData.ticketZone || '',
+                salesStage: group.salesStage || pData.salesStage || '',
                 ownerId,
                 selectedTribun,
                 selectedSeat,
@@ -8054,6 +8096,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
 
                 const t = ev.tiket || {}; 
+                window.loadTicketVariantsIntoForm?.(ev.ticket_variants || {});
                 safeSetValue('k-pre-h', t.presale_h || '');
                 safeSetValue('k-pre-q', t.presale_q || '');
                 safeSetValue('k-reg-eco-h', t.reg_eco_h || '');
@@ -8185,6 +8228,9 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     if (!canUpdateEvent) throw new Error('Akses ditolak: Vendor hanya dapat mengedit event miliknya sendiri.');
                     existingTiket = existingEvent.tiket || {};
                 }
+                const ticketVariants = window.collectTicketVariantsFromForm?.(existingEvent?.ticket_variants || {}) || {};
+                const ticketVariantQuota = Object.values(ticketVariants).reduce((sum, item) => sum + (parseInt(item?.quota || 0, 10) || 0), 0);
+                t_k += ticketVariantQuota;
                 
                 const fasilCheckEl = document.getElementById('ev-has-fasilitas');
                 const fasilEl = document.getElementById('ev-fasilitas');
@@ -8268,6 +8314,8 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     fasilitas: fas, 
                     customQuestions: customQuestions, 
                     total_kuota: t_k, 
+                    ticket_structure_version: 'v40',
+                    ticket_variants: ticketVariants,
                     ownerId: theOwnerId,
                     deposit_enabled: depositEnabled,
                     deposit_from: depositFromValue,
@@ -8337,6 +8385,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 
                 const formEl = document.getElementById('form-add-event');
                 if (formEl) formEl.reset(); 
+                window.resetTicketVariantForm?.();
                 window.editEventKey = null; 
                 closeModal('add-event-modal'); 
             } catch (err) { 
@@ -12017,3 +12066,335 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             };
             setTimeout(startWhenReady, 120);
         });
+
+        window.TICKET_VARIANT_ZONES_V40 = ['Festival', 'Tribune Utara', 'Tribune Selatan', 'Tribune Timur', 'Tribune Barat'];
+        window.TICKET_VARIANT_STAGES_V40 = ['Early Bird', 'Presale 1', 'Presale 2', 'Presale 3', 'General Sale'];
+
+        window.makeTicketVariantKey = function(zone, stage) {
+            const slug = value => (value || '').toString().trim().toLowerCase()
+                .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+            return `${slug(zone)}__${slug(stage)}`.slice(0, 100);
+        };
+
+        window.makeTicketVariantLabel = function(zone, stage) {
+            return `${(zone || '').toString().trim()} — ${(stage || '').toString().trim()}`;
+        };
+
+        window.normalizeTicketVariant = function(raw, key) {
+            const value = raw && typeof raw === 'object' ? raw : {};
+            const zone = (value.zone || '').toString().trim();
+            const stage = (value.stage || '').toString().trim();
+            const resolvedKey = (key || value.key || window.makeTicketVariantKey(zone, stage)).toString();
+            const saleFromAt = Number(value.sale_from_at);
+            const saleToAt = Number(value.sale_to_at);
+            return {
+                key: resolvedKey,
+                zone,
+                stage,
+                label: (value.label || window.makeTicketVariantLabel(zone, stage)).toString().trim(),
+                price: Math.max(0, parseInt(value.price || 0, 10) || 0),
+                quota: Math.max(0, parseInt(value.quota || 0, 10) || 0),
+                sold: Math.max(0, parseInt(value.sold || 0, 10) || 0),
+                active: value.active !== false,
+                deposit_enabled: value.deposit_enabled === true,
+                sale_from: (value.sale_from || '').toString(),
+                sale_to: (value.sale_to || '').toString(),
+                sale_from_at: Number.isFinite(saleFromAt) && saleFromAt >= 0 ? saleFromAt : window.getDepositBoundaryTimestamp?.(value.sale_from, false) || 0,
+                sale_to_at: Number.isFinite(saleToAt) && saleToAt > 0 ? saleToAt : window.getDepositBoundaryTimestamp?.(value.sale_to, true) || 253402300799999,
+                tribun_name: (value.tribun_name || (zone.toLowerCase().startsWith('tribune ') ? zone : '')).toString().trim(),
+                structure_version: 'v40'
+            };
+        };
+
+        window.getEventTicketVariants = function(ev) {
+            const source = ev?.ticket_variants || {};
+            return Object.entries(source).map(([key, value]) => window.normalizeTicketVariant(value, key));
+        };
+
+        window.findTicketVariant = function(ev, categoryOrKey) {
+            const lookup = (categoryOrKey || '').toString().trim().toLowerCase();
+            if (!lookup) return null;
+            return window.getEventTicketVariants(ev).find(item => item.key.toLowerCase() === lookup || item.label.toLowerCase() === lookup) || null;
+        };
+
+        window.isTicketVariantSaleActive = function(variant, nowOverride) {
+            if (!variant || !variant.active || variant.price <= 0 || variant.quota <= variant.sold) return false;
+            const nowAt = Number.isFinite(Number(nowOverride)) ? Number(nowOverride) : Date.now();
+            return nowAt >= Number(variant.sale_from_at || 0) && nowAt <= Number(variant.sale_to_at || 253402300799999);
+        };
+
+        window.getActiveEventTicketVariants = function(ev, options = {}) {
+            const includeSoldOut = options.includeSoldOut === true;
+            const includeInactive = options.includeInactive === true;
+            return window.getEventTicketVariants(ev).filter(item => {
+                if (!includeInactive && !item.active) return false;
+                if (!includeSoldOut && item.quota <= item.sold) return false;
+                if (!includeInactive && !window.isTicketVariantSaleActive(item, options.now)) return false;
+                return item.price > 0 && item.quota > 0;
+            });
+        };
+
+        window.getTicketVariantCategoryKey = function(ev, category) {
+            return window.findTicketVariant(ev, category)?.key || '';
+        };
+
+        window.categoryUsesTribun = function(ev, category) {
+            const variant = window.findTicketVariant(ev, category);
+            if (variant) return Boolean(variant.tribun_name);
+            return Boolean(Array.isArray(ev?.tribuns) && ev.tribuns.length > 0);
+        };
+
+        window.escapeTicketVariantHtml = function(value) {
+            return (value ?? '').toString().replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+        };
+
+        window.renderTicketVariantRow = function(data = {}) {
+            const list = document.getElementById('ev-ticket-variant-list');
+            if (!list) return null;
+            const normalized = window.normalizeTicketVariant(data, data.key || '');
+            const row = document.createElement('div');
+            row.className = 'ticket-variant-row bg-darker border border-indigo-500/25 rounded-xl p-4';
+            row.dataset.key = normalized.key || '';
+            row.dataset.sold = String(normalized.sold || 0);
+            const zoneOptions = window.TICKET_VARIANT_ZONES_V40.map(item => `<option value="${window.escapeTicketVariantHtml(item)}" ${item === normalized.zone ? 'selected' : ''}>${window.escapeTicketVariantHtml(item)}</option>`).join('');
+            const stageOptions = window.TICKET_VARIANT_STAGES_V40.map(item => `<option value="${window.escapeTicketVariantHtml(item)}" ${item === normalized.stage ? 'selected' : ''}>${window.escapeTicketVariantHtml(item)}</option>`).join('');
+            row.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div><label class="text-[10px] text-indigo-300 font-bold">Zona Tiket</label><select class="ticket-variant-zone w-full bg-dark border border-gray-600 rounded p-2 text-white text-sm">${zoneOptions}</select></div>
+                    <div><label class="text-[10px] text-indigo-300 font-bold">Tahap Penjualan</label><select class="ticket-variant-stage w-full bg-dark border border-gray-600 rounded p-2 text-white text-sm">${stageOptions}</select></div>
+                    <div><label class="text-[10px] text-gray-400">Harga (Rp)</label><input type="number" min="0" class="ticket-variant-price w-full bg-dark border border-gray-600 rounded p-2 text-white text-sm" value="${normalized.price || ''}"></div>
+                    <div><label class="text-[10px] text-gray-400">Kuota</label><input type="number" min="0" class="ticket-variant-quota w-full bg-dark border border-gray-600 rounded p-2 text-white text-sm" value="${normalized.quota || ''}"></div>
+                    <div><label class="text-[10px] text-gray-400">Mulai Dijual (Opsional)</label><input type="date" class="ticket-variant-from w-full bg-dark border border-gray-600 rounded p-2 text-white text-sm" value="${window.escapeTicketVariantHtml(normalized.sale_from)}"></div>
+                    <div><label class="text-[10px] text-gray-400">Akhir Penjualan (Opsional)</label><input type="date" class="ticket-variant-to w-full bg-dark border border-gray-600 rounded p-2 text-white text-sm" value="${window.escapeTicketVariantHtml(normalized.sale_to)}"></div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-white/5">
+                    <div class="flex flex-wrap gap-4 text-xs">
+                        <label class="flex items-center gap-2 text-green-300"><input type="checkbox" class="ticket-variant-active w-4 h-4" ${normalized.active ? 'checked' : ''}>Aktif Dijual</label>
+                        <label class="flex items-center gap-2 text-cyan-300"><input type="checkbox" class="ticket-variant-deposit w-4 h-4" ${normalized.deposit_enabled ? 'checked' : ''}>Boleh Deposit</label>
+                        <span class="text-gray-400">Terjual: <b class="text-white">${normalized.sold || 0}</b></span>
+                    </div>
+                    <button type="button" onclick="window.removeTicketVariantRow(this)" class="bg-red-600/20 hover:bg-red-600/40 text-red-300 px-3 py-2 rounded-lg text-xs font-bold"><i class="fa-solid fa-trash mr-1"></i>Hapus/Nonaktifkan</button>
+                </div>`;
+            list.appendChild(row);
+            return row;
+        };
+
+        window.addTicketVariantRow = function(data = {}) {
+            const fallback = { zone: 'Festival', stage: 'General Sale', active: true, deposit_enabled: false };
+            return window.renderTicketVariantRow({ ...fallback, ...data });
+        };
+
+        window.addRecommendedTicketVariants = function() {
+            const list = document.getElementById('ev-ticket-variant-list');
+            if (!list) return;
+            const existing = new Set(Array.from(list.querySelectorAll('.ticket-variant-row')).map(row => {
+                const zone = row.querySelector('.ticket-variant-zone')?.value || '';
+                const stage = row.querySelector('.ticket-variant-stage')?.value || '';
+                return window.makeTicketVariantKey(zone, stage);
+            }));
+            const recommended = [
+                ['Festival', 'Early Bird'], ['Festival', 'Presale 1'], ['Festival', 'Presale 2'], ['Festival', 'Presale 3'], ['Festival', 'General Sale'],
+                ['Tribune Utara', 'General Sale'], ['Tribune Selatan', 'General Sale'], ['Tribune Timur', 'General Sale'], ['Tribune Barat', 'General Sale']
+            ];
+            recommended.forEach(([zone, stage]) => {
+                const key = window.makeTicketVariantKey(zone, stage);
+                if (!existing.has(key)) window.addTicketVariantRow({ key, zone, stage, active: true, deposit_enabled: false });
+            });
+        };
+
+        window.removeTicketVariantRow = function(button) {
+            const row = button?.closest?.('.ticket-variant-row');
+            if (!row) return;
+            const sold = Math.max(0, parseInt(row.dataset.sold || '0', 10) || 0);
+            if (sold > 0) {
+                const active = row.querySelector('.ticket-variant-active');
+                if (active) active.checked = false;
+                return Toast.fire({ icon: 'info', title: `Kategori sudah terjual ${sold} tiket dan hanya dapat dinonaktifkan.` });
+            }
+            row.remove();
+        };
+
+        window.collectTicketVariantsFromForm = function(existingVariants = {}) {
+            const rows = Array.from(document.querySelectorAll('#ev-ticket-variant-list .ticket-variant-row'));
+            const result = {};
+            const seen = new Set();
+            rows.forEach(row => {
+                const zone = (row.querySelector('.ticket-variant-zone')?.value || '').trim();
+                const stage = (row.querySelector('.ticket-variant-stage')?.value || '').trim();
+                const key = window.makeTicketVariantKey(zone, stage);
+                if (!key || !zone || !stage) throw new Error('Zona dan tahap penjualan kategori tambahan wajib dipilih.');
+                if (seen.has(key)) throw new Error(`Kategori tambahan ${zone} — ${stage} tidak boleh dibuat dua kali.`);
+                seen.add(key);
+                const old = existingVariants?.[key] || {};
+                const sold = Math.max(0, parseInt(old.sold ?? row.dataset.sold ?? 0, 10) || 0);
+                const price = Math.max(0, parseInt(row.querySelector('.ticket-variant-price')?.value || '0', 10) || 0);
+                const quota = Math.max(0, parseInt(row.querySelector('.ticket-variant-quota')?.value || '0', 10) || 0);
+                if (quota < sold) throw new Error(`Kuota ${zone} — ${stage} tidak boleh lebih kecil dari tiket terjual (${sold}).`);
+                const saleFrom = row.querySelector('.ticket-variant-from')?.value || '';
+                const saleTo = row.querySelector('.ticket-variant-to')?.value || '';
+                const saleFromAt = window.getDepositBoundaryTimestamp(saleFrom, false);
+                const saleToAt = window.getDepositBoundaryTimestamp(saleTo, true);
+                if (saleFromAt > saleToAt) throw new Error(`Tanggal mulai ${zone} — ${stage} tidak boleh melewati tanggal akhir.`);
+                result[key] = {
+                    key,
+                    zone,
+                    stage,
+                    label: window.makeTicketVariantLabel(zone, stage),
+                    price,
+                    quota,
+                    sold,
+                    active: row.querySelector('.ticket-variant-active')?.checked === true,
+                    deposit_enabled: row.querySelector('.ticket-variant-deposit')?.checked === true,
+                    sale_from: saleFrom,
+                    sale_to: saleTo,
+                    sale_from_at: saleFromAt,
+                    sale_to_at: saleToAt,
+                    tribun_name: zone.toLowerCase().startsWith('tribune ') ? zone : '',
+                    structure_version: 'v40'
+                };
+            });
+            Object.entries(existingVariants || {}).forEach(([key, raw]) => {
+                if (result[key]) return;
+                const normalized = window.normalizeTicketVariant(raw, key);
+                if (normalized.sold > 0) result[key] = { ...normalized, active: false, structure_version: 'v40' };
+            });
+            return result;
+        };
+
+        window.loadTicketVariantsIntoForm = function(variants = {}) {
+            const list = document.getElementById('ev-ticket-variant-list');
+            if (!list) return;
+            list.innerHTML = '';
+            Object.entries(variants || {}).sort((a, b) => (a[1]?.label || a[0]).localeCompare(b[1]?.label || b[0])).forEach(([key, value]) => window.renderTicketVariantRow({ ...value, key }));
+        };
+
+        window.resetTicketVariantForm = function() {
+            const list = document.getElementById('ev-ticket-variant-list');
+            if (list) list.innerHTML = '';
+        };
+
+        const getEventTicketPriceV39 = window.getEventTicketPrice;
+        window.getEventTicketPrice = function(category, eventId) {
+            const ev = window.eventDataMap?.[eventId] || {};
+            const variant = window.findTicketVariant(ev, category);
+            if (variant) return variant.price;
+            return getEventTicketPriceV39(category, eventId);
+        };
+
+        const getEventRemainingTicketQuantityV39 = window.getEventRemainingTicketQuantity;
+        window.getEventRemainingTicketQuantity = function(ev, category) {
+            const variant = window.findTicketVariant(ev, category);
+            if (variant) return Math.max(0, variant.quota - variant.sold);
+            return getEventRemainingTicketQuantityV39(ev, category);
+        };
+
+        const getAllowedDepositCategoriesV39 = window.getAllowedDepositCategories;
+        window.getAllowedDepositCategories = function(ev, eventId) {
+            const legacy = getAllowedDepositCategoriesV39(ev, eventId);
+            const extra = ev?.deposit_enabled ? window.getActiveEventTicketVariants(ev).filter(item => item.deposit_enabled).map(item => item.label) : [];
+            return [...new Set([...(legacy || []), ...extra])];
+        };
+
+        const getAllowedTribunsForCategoryV39 = window.getAllowedTribunsForCategory;
+        window.getAllowedTribunsForCategory = function(ev, category) {
+            const variant = window.findTicketVariant(ev, category);
+            if (variant) {
+                if (!variant.tribun_name || !Array.isArray(ev?.tribuns)) return [];
+                const wanted = variant.tribun_name.toLowerCase();
+                return ev.tribuns.filter(item => (item?.name || '').toString().trim().toLowerCase() === wanted);
+            }
+            return getAllowedTribunsForCategoryV39(ev, category);
+        };
+
+        window.updateTicketVariantSeatingUI = function(ev, category) {
+            const section = document.getElementById('co-tribun-section');
+            const seatGroup = document.getElementById('co-seat-group');
+            const info = document.getElementById('co-tribun-info');
+            const usesTribun = window.categoryUsesTribun(ev, category);
+            if (section) section.classList.toggle('hidden', !usesTribun);
+            if (!usesTribun) {
+                if (seatGroup) seatGroup.classList.add('hidden');
+                if (info) info.textContent = 'Kategori ini tidak menggunakan tribun atau nomor kursi.';
+                return;
+            }
+            window.populateTribunOptionsForCategory(ev, category);
+            const select = document.getElementById('co-tribun');
+            const allowed = window.getAllowedTribunsForCategory(ev, category);
+            if (select && allowed.length === 1) {
+                select.value = allowed[0].name;
+                void window.loadAvailableSeats?.();
+            }
+        };
+
+        const filterTribunOptionsForCategoryV39 = window.filterTribunOptionsForCategory;
+        window.filterTribunOptionsForCategory = function() {
+            const evId = document.getElementById('co-evid')?.value || '';
+            const category = document.getElementById('co-category')?.value || '';
+            const ev = window.eventDataMap?.[evId] || null;
+            if (window.findTicketVariant(ev, category)) return window.updateTicketVariantSeatingUI(ev, category);
+            return filterTribunOptionsForCategoryV39();
+        };
+
+        const openEventDetailPageV39 = window.openEventDetailPage;
+        window.openEventDetailPage = function(evId) {
+            openEventDetailPageV39(evId);
+            const ev = window.eventDataMap?.[evId];
+            const select = document.getElementById('co-category');
+            if (!ev || !select) return;
+            const activeVariants = window.getActiveEventTicketVariants(ev);
+            if (activeVariants.length > 0 && select.options.length === 1 && !select.options[0].value) {
+                const placeholderText = (select.options[0].textContent || '').toLowerCase();
+                if (placeholderText.includes('habis') || placeholderText.includes('tidak tersedia')) select.innerHTML = '';
+            }
+            activeVariants.forEach(variant => {
+                const option = document.createElement('option');
+                option.value = variant.label;
+                option.dataset.categoryKey = variant.key;
+                option.textContent = `${variant.label} - Rp ${variant.price.toLocaleString('id-ID')} (Sisa ${Math.max(0, variant.quota - variant.sold)})`;
+                select.appendChild(option);
+            });
+            if (activeVariants.length > 0) {
+                const button = document.getElementById('btn-process-co');
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = 'Checkout Pembayaran';
+                    button.classList.add('glow-button');
+                    button.classList.remove('bg-gray-600', 'text-gray-400');
+                }
+            }
+            window.calcTotal?.();
+            window.renderDepositSection?.(ev, evId);
+            window.updateTicketVariantSeatingUI(ev, select.value);
+        };
+
+        const canUpgradeTicketCategoryV39 = window.canUpgradeTicketCategory;
+        window.canUpgradeTicketCategory = function(category) {
+            const normalized = (category || '').toString().trim().toLowerCase();
+            if (window.TICKET_VARIANT_ZONES_V40.some(zone => normalized.startsWith(`${zone.toLowerCase()} —`))) return false;
+            return canUpgradeTicketCategoryV39(category);
+        };
+
+        const reconcileEventTicketCountsV39 = window.reconcileEventTicketCounts;
+        window.reconcileEventTicketCounts = async function(eventId) {
+            await reconcileEventTicketCountsV39(eventId);
+            const ev = window.eventDataMap?.[eventId] || (await db.ref(`events/${eventId}`).once('value')).val() || {};
+            const variants = ev.ticket_variants || {};
+            if (!Object.keys(variants).length) return;
+            const [ticketSnap, paymentSnap] = await Promise.all([
+                db.ref('tickets').orderByChild('eventId').equalTo(eventId).once('value'),
+                db.ref('payments').orderByChild('eventId').equalTo(eventId).once('value')
+            ]);
+            const tickets = ticketSnap.val() || {};
+            const payments = paymentSnap.val() || {};
+            const counts = Object.fromEntries(Object.keys(variants).map(key => [key, 0]));
+            const replacementMap = window.getUpgradeReplacementMap(tickets);
+            window.getCanonicalTicketDataset(tickets, payments).forEach(([ticketCode, ticket]) => {
+                if (!ticket || ticket.status === 'TRANSFERRED' || window.isTicketReplacedByUpgrade(ticket, ticketCode, replacementMap)) return;
+                const key = ticket.categoryKey || window.getTicketVariantCategoryKey(ev, ticket.category);
+                if (key && Object.prototype.hasOwnProperty.call(counts, key)) counts[key] += 1;
+            });
+            const updates = {};
+            Object.entries(counts).forEach(([key, count]) => { updates[`events/${eventId}/ticket_variants/${key}/sold`] = count; });
+            if (Object.keys(updates).length) await db.ref().update(updates);
+        };
