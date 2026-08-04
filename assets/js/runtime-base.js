@@ -1,3 +1,4 @@
+        window.TIKETKAKA_RELEASE = 'v35-transfer-final';
 
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67)) || (e.ctrlKey && e.keyCode == 85)) return false; };
@@ -353,17 +354,61 @@
             return price;
         };
 
-        window.isDepositPeriodActive = function(ev) {
-            if (!ev || !ev.deposit_enabled) return false;
-            const now = new Date();
-            const from = ev.deposit_from ? new Date(ev.deposit_from) : null;
-            const to = ev.deposit_to ? new Date(ev.deposit_to) : null;
-            if (from && !isNaN(from.getTime()) && now < from) return false;
-            if (to && !isNaN(to.getTime())) {
-                to.setHours(23, 59, 59, 999);
-                if (now > to) return false;
+        window.getDepositBoundaryTimestamp = function(dateValue, endOfDay = false) {
+            if (typeof dateValue === 'number' && Number.isFinite(dateValue)) return dateValue;
+            const value = (dateValue || '').toString().trim();
+            if (!value) return endOfDay ? 253402300799999 : 0;
+            const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+            let parsed;
+            if (dateOnly) {
+                parsed = new Date(
+                    parseInt(dateOnly[1], 10),
+                    parseInt(dateOnly[2], 10) - 1,
+                    parseInt(dateOnly[3], 10),
+                    endOfDay ? 23 : 0,
+                    endOfDay ? 59 : 0,
+                    endOfDay ? 59 : 0,
+                    endOfDay ? 999 : 0
+                );
+            } else {
+                parsed = new Date(value);
+                if (endOfDay && !isNaN(parsed.getTime())) parsed.setHours(23, 59, 59, 999);
             }
-            return true;
+            return !isNaN(parsed.getTime()) ? parsed.getTime() : (endOfDay ? 253402300799999 : 0);
+        };
+
+        window.getDepositPeriodState = function(ev, nowOverride) {
+            if (!ev || !ev.deposit_enabled) return { active: false, reason: 'DISABLED', fromAt: 0, toAt: 0 };
+            const nowAt = nowOverride instanceof Date ? nowOverride.getTime() : (Number.isFinite(Number(nowOverride)) ? Number(nowOverride) : Date.now());
+            const storedFromAt = Number(ev.deposit_from_at);
+            const storedToAt = Number(ev.deposit_to_at);
+            const fromAt = Number.isFinite(storedFromAt) && storedFromAt >= 0
+                ? storedFromAt
+                : window.getDepositBoundaryTimestamp(ev.deposit_from, false);
+            const toAt = Number.isFinite(storedToAt) && storedToAt > 0
+                ? storedToAt
+                : window.getDepositBoundaryTimestamp(ev.deposit_to, true);
+            if (nowAt < fromAt) return { active: false, reason: 'NOT_STARTED', fromAt, toAt };
+            if (nowAt > toAt) return { active: false, reason: 'EXPIRED', fromAt, toAt };
+            return { active: true, reason: 'ACTIVE', fromAt, toAt };
+        };
+
+        window.isDepositPeriodActive = function(ev, nowOverride) {
+            return window.getDepositPeriodState(ev, nowOverride).active;
+        };
+
+        window.getDepositPeriodMessage = function(ev, nowOverride) {
+            const state = window.getDepositPeriodState(ev, nowOverride);
+            if (state.reason === 'NOT_STARTED') {
+                return 'Periode deposit belum dimulai.';
+            }
+            if (state.reason === 'EXPIRED') {
+                return 'Periode deposit telah berakhir dan pembayaran deposit sudah dikunci otomatis.';
+            }
+            if (state.reason === 'DISABLED') {
+                return 'Deposit untuk event ini sedang tidak aktif.';
+            }
+            return '';
         };
 
         window.getAllowedDepositCategories = function(ev, eventId) {
@@ -1031,7 +1076,7 @@
                 return;
             }
             try {
-                navigator.serviceWorker.register('/sw.js').catch(() => {});
+                navigator.serviceWorker.register('/sw.js?v=35-transfer-final', { updateViaCache: 'none' }).catch(() => {});
             } catch (err) {
                 console.warn('SW registration skipped:', err);
             }
@@ -2988,6 +3033,21 @@
                             window.isSuperAdmin = ['super admin', 'super_admin', 'superadmin', 'SUPER_ADMIN'.toLowerCase()].includes(normalizedRole);
                             window.isVendor = normalizedRole === 'vendor';
                             window.isScanner = normalizedRole.includes('scanner');
+
+                            // v35: sinkronisasi direktori dilakukan setelah profil/role aktif dan diulang singkat bila koneksi belum siap.
+                            const syncTransferDirectoryV35 = () => {
+                                if (typeof window.syncUserDirectoryRecord === 'function') {
+                                    window.syncUserDirectoryRecord(window.currentUserData).catch(error => console.warn('[v35] Sinkronisasi akun transfer setelah login gagal:', error));
+                                }
+                            };
+                            syncTransferDirectoryV35();
+                            setTimeout(syncTransferDirectoryV35, 900);
+                            setTimeout(syncTransferDirectoryV35, 3000);
+                            if (window.isSuperAdmin && typeof window.backfillTransferEmailDirectoryV35 === 'function') {
+                                setTimeout(() => window.backfillTransferEmailDirectoryV35(), 350);
+                                setTimeout(() => window.backfillTransferEmailDirectoryV35(), 3200);
+                            }
+
                             if (window.populatePaymentSettingsInputs) window.populatePaymentSettingsInputs();
                             if (window.isVendor) {
                                 setTimeout(() => {
@@ -3273,6 +3333,9 @@
         };
 
         window.renderTopAdSliderFromBanners = function(bannerList) {
+            if (window.__tiketKakaBannerFastV32 && typeof window.__tiketKakaBannerFastV32.render === 'function') {
+                return window.__tiketKakaBannerFastV32.render(bannerList, { persist: true });
+            }
             const normalizedBanners = Array.isArray(bannerList) ? bannerList.filter((entry) => entry !== '' && entry !== null) : [];
             if (window.cachedSettings && typeof window.cachedSettings === 'object') {
                 window.cachedSettings.banners = normalizedBanners;
@@ -5539,7 +5602,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const eventId = typeof evId === 'string' ? evId : (evId?.value || '');
             const allowed = window.getAllowedDepositCategories(ev, eventId);
             const isDepositActive = window.isDepositPeriodActive(ev);
-            const showDepositOption = ev.deposit_enabled && (allowed.length > 0 || (Array.isArray(ev.deposit_categories) && ev.deposit_categories.length > 0));
+            const showDepositOption = isDepositActive && (allowed.length > 0 || (Array.isArray(ev.deposit_categories) && ev.deposit_categories.length > 0));
             if (!showDepositOption) {
                 if (depositOption) depositOption.classList.add('hidden');
                 if (checkoutRadio) checkoutRadio.checked = true;
@@ -5845,6 +5908,16 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             const evId = document.getElementById('co-evid')?.value || window.currentViewingEventId;
             const eventData = window.eventDataMap && window.eventDataMap[evId];
             if (!eventData) { return Swal.fire({ icon:'error', title:'Event tidak ditemukan!', background:'#1e293b', color:'#fff' }); }
+            const depositPeriodState = window.getDepositPeriodState(eventData);
+            if (!depositPeriodState.active) {
+                return Swal.fire({
+                    icon: 'warning',
+                    title: depositPeriodState.reason === 'EXPIRED' ? 'Deposit Sudah Berakhir' : 'Deposit Belum Tersedia',
+                    text: window.getDepositPeriodMessage(eventData),
+                    background: '#1e293b',
+                    color: '#fff'
+                });
+            }
             const depositCategory = document.getElementById('co-deposit-category');
             const depositAmountInput = document.getElementById('co-deposit-amount');
             const qtyEl = document.getElementById('co-qty');
@@ -7316,10 +7389,22 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
 
                 transferStage = 'mencari akun penerima';
-                const recipientData = await window.findDirectoryUserByEmail(recipientEmail);
+                if (typeof window.findDirectoryUserByEmail !== 'function') {
+                    throw new Error('Runtime transfer v35 belum termuat. Muat ulang halaman agar file aplikasi terbaru digunakan.');
+                }
+                let recipientData = await window.findDirectoryUserByEmail(recipientEmail);
+                if (!recipientData?.uid) {
+                    // Retry bertahap mencakup sinkronisasi penerima atau backfill yang sedang berjalan.
+                    await new Promise(resolve => setTimeout(resolve, 900));
+                    recipientData = await window.findDirectoryUserByEmail(recipientEmail);
+                }
+                if (!recipientData?.uid) {
+                    await new Promise(resolve => setTimeout(resolve, 1800));
+                    recipientData = await window.findDirectoryUserByEmail(recipientEmail);
+                }
                 const recipientUid = recipientData?.uid || null;
                 if (!recipientUid || !recipientData) {
-                    return Swal.fire({icon:'error', title:'Email Tidak Terdaftar', text:'Penerima harus sudah memiliki akun Tiket Kaka.', background:'#1e293b', color:'#fff'});
+                    return Swal.fire({icon:'error', title:'Email Penerima Belum Ditemukan — v35', text:'Akun tersebut belum memiliki indeks transfer. Minta penerima login satu kali setelah update v35, atau login Super Admin untuk menjalankan sinkronisasi akun lama.', background:'#1e293b', color:'#fff'});
                 }
                 if (recipientUid === currentUser.uid) {
                     return Swal.fire({icon:'warning', title:'Penerima Tidak Valid', text:'Tiket tidak dapat ditransfer ke akun Anda sendiri.', background:'#1e293b', color:'#fff'});
@@ -8062,6 +8147,15 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 if (!(document.getElementById('ev-date')?.value || '').trim()) throw new Error('Tanggal event wajib diisi.');
                 if (!(document.getElementById('ev-location')?.value || '').trim()) throw new Error('Lokasi event wajib diisi.');
 
+                const depositEnabled = document.getElementById('ev-deposit-enabled')?.checked ? true : false;
+                const depositFromValue = document.getElementById('ev-deposit-from')?.value || '';
+                const depositToValue = document.getElementById('ev-deposit-to')?.value || '';
+                const depositFromAt = window.getDepositBoundaryTimestamp(depositFromValue, false);
+                const depositToAt = window.getDepositBoundaryTimestamp(depositToValue, true);
+                if (depositEnabled && depositFromAt > depositToAt) {
+                    throw new Error('Tanggal mulai deposit tidak boleh melewati tanggal akhir deposit.');
+                }
+
                 const ownerBrandData = (window.usersMapCache && theOwnerId !== 'SUPER_ADMIN') ? (window.usersMapCache[theOwnerId] || {}) : (window.currentUserData || {});
                 const resolvedOrgName = (document.getElementById('ev-org-name')?.value || '').trim() || ownerBrandData.nama || 'Tiket Kaka';
                 const resolvedOrgLogo = window.safeImageUrl((document.getElementById('ev-org-logo')?.value || '').trim(), '') || window.safeImageUrl(ownerBrandData.logoUrl || ownerBrandData.vendorLogoUrl || '', '');
@@ -8086,9 +8180,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     customQuestions: customQuestions, 
                     total_kuota: t_k, 
                     ownerId: theOwnerId,
-                    deposit_enabled: document.getElementById('ev-deposit-enabled')?.checked ? true : false,
-                    deposit_from: document.getElementById('ev-deposit-from')?.value || '',
-                    deposit_to: document.getElementById('ev-deposit-to')?.value || '',
+                    deposit_enabled: depositEnabled,
+                    deposit_from: depositFromValue,
+                    deposit_to: depositToValue,
+                    deposit_from_at: depositFromAt,
+                    deposit_to_at: depositToAt,
                     deposit_categories: [
                         document.getElementById('ev-deposit-cat-presale')?.checked ? 'Presale' : null,
                         document.getElementById('ev-deposit-cat-reguler')?.checked ? 'Reguler' : null,
@@ -8448,7 +8544,27 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
                 
                 const res = await auth.createUserWithEmailAndPassword(emailInput, passInput); 
-                await db.ref('users/' + res.user.uid).set({ uid: res.user.uid, nama: nameEl.value || 'User', phone: phoneEl.value || '', email: res.user.email, username: usernameEl.value || 'user', role: 'User', createdAt: firebase.database.ServerValue.TIMESTAMP }); 
+                const newUserProfile = { uid: res.user.uid, nama: nameEl.value || 'User', phone: phoneEl.value || '', email: res.user.email, username: usernameEl.value || 'user', role: 'User', createdAt: firebase.database.ServerValue.TIMESTAMP };
+                await db.ref('users/' + res.user.uid).set(newUserProfile); 
+                try {
+                    if (typeof window.syncUserDirectoryRecord === 'function') {
+                        await window.syncUserDirectoryRecord(newUserProfile);
+                    } else {
+                        const normalizedEmail = String(res.user.email || emailInput).trim().toLowerCase();
+                        const transferDirectoryRecord = {
+                            uid: res.user.uid,
+                            email: String(res.user.email || emailInput).trim(),
+                            emailLower: normalizedEmail,
+                            nama: String(newUserProfile.nama || newUserProfile.username || 'User').slice(0, 200),
+                            role: 'User',
+                            updatedAt: firebase.database.ServerValue.TIMESTAMP
+                        };
+                        await db.ref(`userDirectory/${res.user.uid}`).set(transferDirectoryRecord);
+                    }
+                } catch (directoryError) {
+                    // Akun tetap berhasil dibuat, tetapi tampilkan log agar sinkronisasi dapat diulang saat login.
+                    console.warn('[REGISTER v35] Direktori transfer akan disinkronkan ulang saat login:', directoryError);
+                }
                 await auth.signOut(); 
                 
                 const loginEmailEl = document.getElementById('login-email');
@@ -11115,6 +11231,42 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 return { tickets, payments, users, events: plain(eventsSnap) };
             };
 
+            window.getTransferEmailDirectoryKey = function(email) {
+                return String(email || '')
+                    .trim()
+                    .toLowerCase()
+                    .replace(/\./g, '%2E')
+                    .replace(/#/g, '%23')
+                    .replace(/\$/g, '%24')
+                    .replace(/\[/g, '%5B')
+                    .replace(/\]/g, '%5D')
+                    .replace(/\//g, '%2F');
+            };
+
+            window.buildTransferDirectoryRecords = function(uid, email, profile = {}) {
+                const canonicalEmail = String(email || profile.email || '').trim();
+                const normalizedEmail = canonicalEmail.toLowerCase();
+                const safeName = String(profile.nama || profile.username || 'User').trim().slice(0, 200) || 'User';
+                if (!uid || !normalizedEmail) return null;
+                return {
+                    emailKey: window.getTransferEmailDirectoryKey(normalizedEmail),
+                    directoryRecord: {
+                        uid,
+                        email: canonicalEmail,
+                        emailLower: normalizedEmail,
+                        nama: safeName,
+                        role: 'User',
+                        updatedAt: firebase.database.ServerValue.TIMESTAMP
+                    },
+                    emailRecord: {
+                        uid,
+                        emailLower: normalizedEmail,
+                        nama: safeName,
+                        updatedAt: firebase.database.ServerValue.TIMESTAMP
+                    }
+                };
+            };
+
             window.syncUserDirectoryRecord = async function(profileOverride) {
                 const user = window.auth?.currentUser;
                 if (!user || !window.db) return false;
@@ -11122,26 +11274,57 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 if (!profile.uid) {
                     try { profile = (await db.ref(`users/${user.uid}`).once('value')).val() || {}; } catch (e) {}
                 }
-                const record = {
-                    uid: user.uid,
-                    email: String(user.email || profile.email || '').trim(),
-                    emailLower: String(user.email || profile.email || '').trim().toLowerCase(),
-                    nama: String(profile.nama || profile.username || 'User').slice(0, 200),
-                    role: String(profile.role || 'User').slice(0, 40),
-                    updatedAt: firebase.database.ServerValue.TIMESTAMP
-                };
-                if (!record.email || !record.emailLower) return false;
-                await db.ref(`userDirectory/${user.uid}`).set(record);
+                const canonicalEmail = String(user.email || profile.email || '').trim();
+                const records = window.buildTransferDirectoryRecords(user.uid, canonicalEmail, profile);
+                if (!records || !records.emailKey) return false;
+
+                // v35: indeks UID adalah sumber utama dan harus berhasil secara mandiri.
+                // Jangan gabungkan dengan indeks email agar kegagalan indeks tambahan tidak membatalkan direktori utama.
+                await db.ref(`userDirectory/${user.uid}`).set(records.directoryRecord);
+
+                // Repair profil akun lama yang belum menyimpan email di Realtime Database.
+                if (canonicalEmail && String(profile.email || '').trim().toLowerCase() !== canonicalEmail.toLowerCase()) {
+                    try { await db.ref(`users/${user.uid}/email`).set(canonicalEmail); } catch (profileEmailError) {
+                        console.warn('[v35] Email profil lama belum dapat diperbaiki:', profileEmailError);
+                    }
+                }
+
+                try {
+                    await db.ref(`userEmailDirectory/${records.emailKey}`).set(records.emailRecord);
+                } catch (indexError) {
+                    // Indeks utama sudah aman; indeks email langsung hanya akselerator/fallback.
+                    console.warn('[v35] Indeks email langsung gagal, userDirectory tetap aktif.', indexError);
+                }
                 return true;
             };
 
             window.findDirectoryUserByEmail = async function(email) {
                 const normalized = String(email || '').trim().toLowerCase();
                 if (!normalized || !window.db || !window.auth?.currentUser) return null;
-                const snap = await db.ref('userDirectory').orderByChild('emailLower').equalTo(normalized).limitToFirst(2).once('value');
-                const data = snap.val() || {};
-                const uid = Object.keys(data)[0] || '';
-                return uid ? { uid, ...(data[uid] || {}) } : null;
+
+                // v35: query userDirectory menjadi sumber utama karena ditulis terpisah dan diindeks oleh emailLower.
+                try {
+                    const snap = await db.ref('userDirectory').orderByChild('emailLower').equalTo(normalized).limitToFirst(2).once('value');
+                    const data = snap.val() || {};
+                    const entry = Object.entries(data).find(([, value]) => String(value?.emailLower || '').trim().toLowerCase() === normalized);
+                    if (entry) return { uid: entry[0], ...(entry[1] || {}) };
+                } catch (directoryLookupError) {
+                    console.warn('[v35] Query userDirectory gagal, mencoba indeks email langsung.', directoryLookupError);
+                }
+
+                const emailKey = window.getTransferEmailDirectoryKey(normalized);
+                if (emailKey) {
+                    try {
+                        const directSnap = await db.ref(`userEmailDirectory/${emailKey}`).once('value');
+                        const direct = directSnap.val() || null;
+                        if (direct && direct.uid && String(direct.emailLower || '').trim().toLowerCase() === normalized) {
+                            return { uid: direct.uid, ...direct };
+                        }
+                    } catch (directLookupError) {
+                        console.warn('[v35] Lookup email langsung belum tersedia.', directLookupError);
+                    }
+                }
+                return null;
             };
 
             window.syncVendorCustomerRecord = async function(ownerId, profileOverride) {
@@ -11214,15 +11397,10 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     const payments = paymentsSnap.val() || {};
                     const updates = {};
                     Object.entries(users).forEach(([uid, user]) => {
-                        if (!user?.email) return;
-                        updates[`userDirectory/${uid}`] = {
-                            uid,
-                            email: String(user.email).trim(),
-                            emailLower: String(user.email).trim().toLowerCase(),
-                            nama: String(user.nama || user.username || 'User').slice(0, 200),
-                            role: String(user.role || 'User').slice(0, 40),
-                            updatedAt: firebase.database.ServerValue.TIMESTAMP
-                        };
+                        const records = window.buildTransferDirectoryRecords(uid, user?.email || '', user || {});
+                        if (!records || !records.emailKey) return;
+                        updates[`userDirectory/${uid}`] = records.directoryRecord;
+                        updates[`userEmailDirectory/${records.emailKey}`] = records.emailRecord;
                     });
                     Object.values(payments).forEach(payment => {
                         const ownerId = payment?.ownerId;
@@ -11248,17 +11426,136 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                 }
             };
 
+            window.backfillTransferEmailDirectoryV35 = async function() {
+                if (!window.isSuperAdmin || !window.db || window.__transferDirectoryBackfillV35Running) return false;
+                window.__transferDirectoryBackfillV35Running = true;
+                try {
+                    let cursor = '';
+                    let processed = 0;
+                    let indexed = 0;
+                    let pageCount = 0;
+                    while (pageCount < 200) {
+                        let query = db.ref('users').orderByKey();
+                        if (cursor) query = query.startAt(cursor);
+                        const snap = await query.limitToFirst(cursor ? 501 : 500).once('value');
+                        let entries = Object.entries(snap.val() || {});
+                        if (cursor && entries[0]?.[0] === cursor) entries = entries.slice(1);
+                        if (entries.length === 0) break;
+
+                        const primaryUpdates = {};
+                        const directUpdates = {};
+                        entries.forEach(([uid, profile]) => {
+                            const records = window.buildTransferDirectoryRecords(uid, profile?.email || '', profile || {});
+                            if (!records || !records.emailKey) return;
+                            primaryUpdates[`userDirectory/${uid}`] = records.directoryRecord;
+                            directUpdates[`userEmailDirectory/${records.emailKey}`] = records.emailRecord;
+                            indexed += 1;
+                        });
+
+                        const primaryEntries = Object.entries(primaryUpdates);
+                        for (let i = 0; i < primaryEntries.length; i += 300) {
+                            await db.ref().update(Object.fromEntries(primaryEntries.slice(i, i + 300)));
+                        }
+
+                        // Indeks langsung diproses setelah direktori utama selesai dan tidak boleh menggagalkannya.
+                        const directEntries = Object.entries(directUpdates);
+                        for (let i = 0; i < directEntries.length; i += 300) {
+                            try {
+                                await db.ref().update(Object.fromEntries(directEntries.slice(i, i + 300)));
+                            } catch (directBackfillError) {
+                                console.warn('[v35] Sebagian indeks email langsung gagal; direktori utama sudah tersimpan.', directBackfillError);
+                            }
+                        }
+
+                        processed += entries.length;
+                        cursor = entries[entries.length - 1][0];
+                        pageCount += 1;
+                        if (entries.length < 500) break;
+                    }
+                    window.__transferDirectoryBackfillV35Completed = true;
+                    console.info(`[v35] Direktori transfer memproses ${processed} akun; ${indexed} akun memiliki email yang dapat diindeks.`);
+                    return true;
+                } catch (error) {
+                    console.warn('[v35] Backfill direktori transfer gagal:', error);
+                    return false;
+                } finally {
+                    window.__transferDirectoryBackfillV35Running = false;
+                }
+            };
+
+            // Alias kompatibilitas agar pemanggilan v34 lama tetap mengarah ke perbaikan v35.
+            window.backfillTransferEmailDirectoryV34 = window.backfillTransferEmailDirectoryV35;
+
             // Keep the minimal transfer directory current without exposing full user profiles.
             try {
                 auth.onAuthStateChanged(user => {
                     if (!user) return;
                     const runMaintenance = () => {
                         window.syncUserDirectoryRecord().catch(err => console.warn('[v30] user directory sync', err));
-                        if (window.isSuperAdmin) window.backfillPrivacyIndexesV30();
+                        if (window.isSuperAdmin) {
+                            window.backfillPrivacyIndexesV30();
+                            window.backfillTransferEmailDirectoryV35();
+                        }
                         if (window.isSuperAdmin || window.isVendor) window.backfillEventSeatStatusV30();
                     };
+                    runMaintenance();
                     setTimeout(runMaintenance, 1400);
                     setTimeout(runMaintenance, 4200);
                 });
             } catch (e) {}
+        })();
+        // Automatic deposit-period locking and legacy timestamp backfill (v31)
+        (function () {
+            const V31_BACKFILL_BATCH = 150;
+
+            function currentUid() {
+                return window.currentUserData?.uid || window.auth?.currentUser?.uid || '';
+            }
+
+            window.backfillDepositPeriodTimestampsV31 = async function() {
+                if ((!window.isSuperAdmin && !window.isVendor) || !window.db || window.__depositPeriodBackfillV31Running) return false;
+                window.__depositPeriodBackfillV31Running = true;
+                try {
+                    const snap = await db.ref('events').once('value');
+                    const events = snap.val() || {};
+                    const uid = currentUid();
+                    const updates = {};
+                    Object.entries(events).forEach(([eventId, eventData]) => {
+                        if (!eventData || !eventData.deposit_enabled) return;
+                        const ownerId = eventData.ownerId || 'SUPER_ADMIN';
+                        if (window.isVendor && ownerId !== uid) return;
+                        const fromAt = window.getDepositBoundaryTimestamp(eventData.deposit_from, false);
+                        const toAt = window.getDepositBoundaryTimestamp(eventData.deposit_to, true);
+                        if (!Number.isFinite(Number(eventData.deposit_from_at)) || Number(eventData.deposit_from_at) !== fromAt) {
+                            updates[`events/${eventId}/deposit_from_at`] = fromAt;
+                        }
+                        if (!Number.isFinite(Number(eventData.deposit_to_at)) || Number(eventData.deposit_to_at) !== toAt) {
+                            updates[`events/${eventId}/deposit_to_at`] = toAt;
+                        }
+                    });
+                    const entries = Object.entries(updates);
+                    for (let index = 0; index < entries.length; index += V31_BACKFILL_BATCH) {
+                        await db.ref().update(Object.fromEntries(entries.slice(index, index + V31_BACKFILL_BATCH)));
+                    }
+                    return true;
+                } catch (error) {
+                    console.warn('[v31] Backfill periode deposit gagal:', error);
+                    return false;
+                } finally {
+                    window.__depositPeriodBackfillV31Running = false;
+                }
+            };
+
+            try {
+                auth.onAuthStateChanged(user => {
+                    if (!user) return;
+                    const run = () => {
+                        if (window.isSuperAdmin || window.isVendor) {
+                            window.backfillDepositPeriodTimestampsV31();
+                        }
+                    };
+                    setTimeout(run, 1800);
+                    setTimeout(run, 5200);
+                });
+            } catch (error) {}
         })();

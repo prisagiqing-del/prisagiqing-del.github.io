@@ -7,7 +7,7 @@
  */
 
 const CACHE_PREFIXES = ['btix-', 'tiketkaka-'];
-const CACHE_NAME = 'tiketkaka-v30-vendor-data-isolation';
+const CACHE_NAME = 'tiketkaka-v35-transfer-final';
 
 const APP_SHELL = [
   './',
@@ -18,6 +18,7 @@ const APP_SHELL = [
   './assets/js/head-errors.js',
   './assets/js/tailwind-config.js',
   './assets/js/loading-overlay.js',
+  './assets/js/banner-fast-bootstrap.js',
   './assets/js/runtime-base.js',
   './assets/js/report-pdf-overrides.js',
   './assets/js/buyer-report-overrides.js',
@@ -79,6 +80,23 @@ self.addEventListener('fetch', event => {
     requestUrl.pathname.endsWith('/favicon.ico');
 
   if (!isStaticAsset) return;
+
+  const isCriticalRuntime = requestUrl.pathname.endsWith('/assets/js/runtime-base.js');
+
+  if (isCriticalRuntime) {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' })
+        .then(response => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(async () => (await caches.match(request)) || Response.error())
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(request).then(cachedResponse => {
