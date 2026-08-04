@@ -1,4 +1,4 @@
-        window.TIKETKAKA_RELEASE = 'v41-legacy-festival';
+        window.TIKETKAKA_RELEASE = 'v42-all-tribuns';
 
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67)) || (e.ctrlKey && e.keyCode == 85)) return false; };
@@ -1087,7 +1087,7 @@
                 return;
             }
             try {
-                navigator.serviceWorker.register('/sw.js?v=41-legacy-festival', { updateViaCache: 'none' }).catch(() => {});
+                navigator.serviceWorker.register('/sw.js?v=42-all-tribuns', { updateViaCache: 'none' }).catch(() => {});
             } catch (err) {
                 console.warn('SW registration skipped:', err);
             }
@@ -12163,10 +12163,13 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
         };
 
         window.categoryUsesTribun = function(ev, category) {
+            const hasConfiguredTribuns = Boolean(Array.isArray(ev?.tribuns) && ev.tribuns.length > 0);
             const variant = window.findTicketVariant(ev, category);
-            if (variant) return Boolean(variant.tribun_name);
-            if ((category || '').toString().trim().toLowerCase() === 'festival') return false;
-            return Boolean(Array.isArray(ev?.tribuns) && ev.tribuns.length > 0);
+            // v42: every additional category may use every configured tribunal.
+            if (variant) return hasConfiguredTribuns;
+            // Legacy Festival remains optional: it uses tribunals only when the event enables them.
+            if ((category || '').toString().trim().toLowerCase() === 'festival') return hasConfiguredTribuns;
+            return hasConfiguredTribuns;
         };
 
         window.escapeTicketVariantHtml = function(value) {
@@ -12322,12 +12325,14 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
         const getAllowedTribunsForCategoryV39 = window.getAllowedTribunsForCategory;
         window.getAllowedTribunsForCategory = function(ev, category) {
+            const configuredTribuns = Array.isArray(ev?.tribuns)
+                ? ev.tribuns.filter(item => item && (item.name || '').toString().trim())
+                : [];
             const variant = window.findTicketVariant(ev, category);
-            if (variant) {
-                if (!variant.tribun_name || !Array.isArray(ev?.tribuns)) return [];
-                const wanted = variant.tribun_name.toLowerCase();
-                return ev.tribuns.filter(item => (item?.name || '').toString().trim().toLowerCase() === wanted);
-            }
+            const normalizedCategory = (category || '').toString().trim().toLowerCase();
+            // v42: all configured tribunals stay selectable for every added combination
+            // and for the optional legacy Festival category.
+            if (variant || normalizedCategory === 'festival') return configuredTribuns;
             return getAllowedTribunsForCategoryV39(ev, category);
         };
 
@@ -12339,10 +12344,11 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
             if (section) section.classList.toggle('hidden', !usesTribun);
             if (!usesTribun) {
                 if (seatGroup) seatGroup.classList.add('hidden');
-                if (info) info.textContent = 'Kategori ini tidak menggunakan tribun atau nomor kursi.';
+                if (info) info.textContent = 'Sistem tribun tidak diaktifkan untuk event ini.';
                 return;
             }
             window.populateTribunOptionsForCategory(ev, category);
+            if (seatGroup) seatGroup.classList.toggle('hidden', ev?.tribun_use_seat_number === false);
             const select = document.getElementById('co-tribun');
             const allowed = window.getAllowedTribunsForCategory(ev, category);
             if (select && allowed.length === 1) {
