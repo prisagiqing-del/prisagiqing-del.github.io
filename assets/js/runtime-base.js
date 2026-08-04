@@ -1,4 +1,4 @@
-        window.TIKETKAKA_RELEASE = 'v35-transfer-final';
+        window.TIKETKAKA_RELEASE = 'v36-transfer-lock';
 
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67)) || (e.ctrlKey && e.keyCode == 85)) return false; };
@@ -7568,6 +7568,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
 
                 if (!existingOperation) {
                     transferStage = 'membuat izin transfer';
+                    const clientAttemptId = `${currentUser.uid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
                     const operationData = cleanObject({
                         oldTicketCode: ticketCode,
                         newTicketCode,
@@ -7579,29 +7580,84 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                         eventId: originalTicket.eventId,
                         rulesVersion: 'v19',
                         status: 'PENDING',
-                        createdAt: transferTimestamp
+                        createdAt: transferTimestamp,
+                        clientAttemptId
                     });
-                    const operationResult = await operationRef.transaction(current => current || operationData);
+                    const operationResult = await operationRef.transaction(current => current || operationData, undefined, false);
                     if (!operationResult.committed) throw new Error('Proses transfer lain sudah berjalan. Silakan muat ulang.');
-                    operationCreated = true;
+
+                    // Selalu gunakan operasi yang benar-benar tersimpan di server. Ini penting bila dua tab
+                    // memulai transfer pada waktu yang hampir bersamaan dan menghasilkan kode tiket berbeda.
+                    const storedOperation = operationResult.snapshot?.val() || operationData;
+                    if (storedOperation.fromUid !== currentUser.uid) {
+                        throw new Error('Tiket sedang diproses oleh akun lain. Hubungi administrator.');
+                    }
+                    if (storedOperation.toUid !== recipientUid || (storedOperation.toEmail || '').toLowerCase() !== recipientEmail) {
+                        throw new Error('Ada transfer lain ke penerima berbeda yang sedang berjalan. Muat ulang halaman.');
+                    }
+                    newTicketCode = storedOperation.newTicketCode || newTicketCode;
+                    transferTimestamp = Number(storedOperation.createdAt || transferTimestamp);
+                    operationCreated = storedOperation.clientAttemptId === clientAttemptId;
+                    existingOperation = storedOperation;
                 }
 
                 transferStage = 'mengunci tiket lama';
-                if (originalTicket.status !== 'TRANSFER_PENDING') {
+                const transferLockPatch = {
+                    status: 'TRANSFER_PENDING',
+                    transferOperationId: ticketCode,
+                    transferredTo: recipientEmail,
+                    transferredToUid: recipientUid,
+                    transferredToTicketCode: newTicketCode,
+                    transferredAt: transferTimestamp,
+                    transferHistory: `Ditransfer ke: ${recipientName} (${recipientEmail})`
+                };
+                const buildTransferLock = current => ({ ...current, ...transferLockPatch });
+                const isMatchingTransferLock = current => !!current
+                    && current.uid === currentUser.uid
+                    && current.status === 'TRANSFER_PENDING'
+                    && current.transferOperationId === ticketCode
+                    && current.transferredToUid === recipientUid
+                    && current.transferredToTicketCode === newTicketCode
+                    && (current.transferredTo || '').toLowerCase() === recipientEmail;
+
+                if (!isMatchingTransferLock(originalTicket)) {
+                    // Firebase dapat memanggil handler transaksi pertama kali dengan nilai null ketika cache
+                    // lokal belum siap. Snapshot yang baru dibaca dipakai sebagai fallback sementara; server
+                    // tetap akan menjalankan ulang handler dengan data otoritatif sebelum commit.
+                    const lastKnownActiveTicket = originalTicket && originalTicket.uid === currentUser.uid && originalTicket.status === 'ACTIVE'
+                        ? originalTicket
+                        : null;
                     const lockResult = await ticketRef.transaction(current => {
-                        if (!current || current.uid !== currentUser.uid || current.status !== 'ACTIVE') return;
-                        return {
-                            ...current,
-                            status: 'TRANSFER_PENDING',
-                            transferOperationId: ticketCode,
-                            transferredTo: recipientEmail,
-                            transferredToUid: recipientUid,
-                            transferredToTicketCode: newTicketCode,
-                            transferredAt: transferTimestamp,
-                            transferHistory: `Ditransfer ke: ${recipientName} (${recipientEmail})`
-                        };
-                    });
-                    if (!lockResult.committed) throw new Error('Tiket sedang diproses atau statusnya sudah berubah. Silakan muat ulang.');
+                        if (isMatchingTransferLock(current)) return current;
+                        const candidate = current || lastKnownActiveTicket;
+                        if (!candidate || candidate.uid !== currentUser.uid || candidate.status !== 'ACTIVE') return;
+                        return buildTransferLock(candidate);
+                    }, undefined, false);
+
+                    if (!lockResult.committed) {
+                        // Jangan langsung gagal akibat cache/race. Periksa keadaan server: lock yang sama
+                        // dianggap berhasil dan proses dapat dilanjutkan tanpa membuat tiket ganda.
+                        let latestTicket = (await ticketRef.once('value')).val();
+                        if (!isMatchingTransferLock(latestTicket)
+                            && latestTicket?.uid === currentUser.uid
+                            && latestTicket?.status === 'ACTIVE') {
+                            // Fallback server-side patch. Izin transfer yang unik sudah tersimpan dan Rules
+                            // tetap memvalidasi transisi ACTIVE -> TRANSFER_PENDING secara atomik.
+                            try {
+                                await ticketRef.update(transferLockPatch);
+                            } catch (lockPatchError) {
+                                console.warn('[TRANSFER v36] Fallback lock patch ditolak; memeriksa status server terbaru.', lockPatchError);
+                            }
+                            latestTicket = (await ticketRef.once('value')).val();
+                        }
+                        if (!isMatchingTransferLock(latestTicket)) {
+                            const latestStatus = latestTicket?.status || 'TIDAK_DITEMUKAN';
+                            throw new Error(`Tiket tidak dapat dikunci. Status server saat ini: ${latestStatus}. Silakan muat ulang.`);
+                        }
+                        originalTicket = latestTicket;
+                    } else {
+                        originalTicket = lockResult.snapshot?.val() || buildTransferLock(originalTicket);
+                    }
                 }
                 lockedTicketCode = ticketCode;
                 lockedNewTicketCode = newTicketCode;
@@ -7723,7 +7779,7 @@ Kebijakan Privasi, Syarat & Ketentuan, ketentuan event, serta informasi transaks
                     }
                 }
 
-                if (operationRef && (operationCreated || lockedTicketCode) && !originalTicketFinalized) {
+                if (operationRef && operationCreated && !originalTicketFinalized) {
                     try {
                         const stagedSnap = lockedNewTicketCode ? await db.ref(`tickets/${lockedNewTicketCode}`).once('value') : null;
                         if (!stagedSnap || !stagedSnap.exists()) await operationRef.remove();
